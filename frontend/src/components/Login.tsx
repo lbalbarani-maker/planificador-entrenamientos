@@ -1,14 +1,5 @@
 import React, { useState } from 'react';
-
-interface User {
-  id: string;
-  email: string;
-  fullName: string;
-  password: string;
-  role: 'admin' | 'preparador';
-  isActive: boolean;
-  createdAt: string;
-}
+import { usersApi } from '../lib/supabaseUsers';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -21,74 +12,29 @@ const Login: React.FC = () => {
     setLoading(true);
     setError('');
 
-    // Simulamos login por ahora - luego conectaremos con backend
-    setTimeout(() => {
-      try {
-        // Leer usuarios desde localStorage
-        const savedUsers = localStorage.getItem('users');
-        let users: User[] = [];
+    try {
+      // Buscar usuario en Supabase
+      const user = await usersApi.loginUser(email, password);
+
+      if (user) {
+        // Login exitoso - guardar sesión
+        localStorage.setItem('user', JSON.stringify({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          fullName: user.full_name
+        }));
         
-        if (savedUsers) {
-          users = JSON.parse(savedUsers);
-        } else {
-          // Si no hay usuarios en localStorage, usar los iniciales
-          users = [
-            {
-              id: '1',
-              email: 'admin@sanse.com',
-              fullName: 'Administrador Principal',
-              password: 'admin123',
-              role: 'admin',
-              isActive: true,
-              createdAt: '2024-01-01'
-            },
-            {
-              id: '2',
-              email: 'preparador@sanse.com',
-              fullName: 'Preparador Físico',
-              password: 'preparador123',
-              role: 'preparador',
-              isActive: true,
-              createdAt: '2024-01-02'
-            },
-            {
-              id: '3',
-              email: 'maria.garcia@sanse.com',
-              fullName: 'María García López',
-              password: 'maria123',
-              role: 'preparador',
-              isActive: true,
-              createdAt: '2024-01-03'
-            }
-          ];
-        }
-
-        // Buscar usuario por email y contraseña
-        const user = users.find(u => 
-          u.email === email && 
-          u.password === password && 
-          u.isActive === true
-        );
-
-        if (user) {
-          // Login exitoso - guardar sesión CON EL NOMBRE REAL DEL USUARIO
-          localStorage.setItem('user', JSON.stringify({
-            id: user.id,
-            email: user.email,
-            role: user.role,
-            fullName: user.fullName  // ✅ ESTA ES LA CLAVE - usar el nombre real
-          }));
-          
-          window.location.reload();
-        } else {
-          setError('Credenciales incorrectas o usuario inactivo');
-        }
-      } catch (error) {
-        console.error('Error en login:', error);
-        setError('Error al iniciar sesión. Intenta nuevamente.');
+        window.location.reload();
+      } else {
+        setError('Credenciales incorrectas o usuario inactivo');
       }
+    } catch (error) {
+      console.error('Error en login:', error);
+      setError('Error al iniciar sesión. Intenta nuevamente.');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -157,6 +103,13 @@ const Login: React.FC = () => {
             {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
           </button>
         </form>
+
+        {/* Información de prueba */}
+        <div className="mt-6 p-4 bg-blue-50 rounded-md text-sm text-blue-700">
+          <p className="font-semibold">Usuarios de prueba:</p>
+          <p>Admin: admin@sanse.com / admin123</p>
+          <p className="text-xs mt-2">* Los usuarios se guardan en Supabase</p>
+        </div>
       </div>
     </div>
   );
