@@ -1,39 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { Training, Exercise, Category, TrainingExercise } from '../types/training';
+import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
 
-interface Category {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface Exercise {
-  id: string;
-  name: string;
-  description: string;
-  estimatedTime: number;
-  categoryId: string;
-  category?: Category;
-}
-
-interface TrainingExercise {
-  exerciseId: string;
-  customTime: number;
-  order: number;
-  exercise?: Exercise;
-}
-
-interface Training {
-  id: string;
-  name: string;
-  categories: string[];
-  exercises: TrainingExercise[];
-  totalTime: number;
-  observations: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-  shareId: string;
-}
 
 const Trainings: React.FC = () => {
   const [trainings, setTrainings] = useState<Training[]>([]);
