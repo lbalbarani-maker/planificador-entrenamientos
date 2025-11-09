@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Training, Exercise, Category, TrainingExercise } from '../types/training';
-import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
+// Eliminar las importaciones no utilizadas
+// import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
 
 const Trainings: React.FC = () => {
   const [trainings, setTrainings] = useState<Training[]>([]);
@@ -120,10 +121,10 @@ const Trainings: React.FC = () => {
     setTotalTime(total);
   }, [cartExercises]);
 
-  // Filtrar ejercicios por categorías seleccionadas
-  const filteredExercises = exercises.filter(exercise =>
-    formData.categories.length === 0 || formData.categories.includes(exercise.categoryId)
-  );
+  // ELIMINAR: Esta variable ya no se usa después de quitar los filtros
+  // const filteredExercises = exercises.filter(exercise =>
+  //   formData.categories.length === 0 || formData.categories.includes(exercise.categoryId)
+  // );
 
   // Agregar ejercicio al carrito - CORREGIDO
   const addToCart = (exercise: Exercise) => {
