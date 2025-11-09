@@ -4,6 +4,7 @@ interface User {
   id: string;
   email: string;
   fullName: string;
+  password: string; // AGREGAR ESTO
   role: 'admin' | 'preparador';
   isActive: boolean;
   createdAt: string;
@@ -11,18 +12,17 @@ interface User {
 
 const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>(() => {
-    // Cargar usuarios desde localStorage al iniciar
     const savedUsers = localStorage.getItem('users');
     if (savedUsers) {
       return JSON.parse(savedUsers);
     }
     
-    // Si no hay usuarios guardados, usar los mock iniciales
     const initialUsers: User[] = [
       {
         id: '1',
         email: 'admin@sanse.com',
         fullName: 'Administrador Principal',
+        password: 'admin123', // CONTRASEÑA INICIAL
         role: 'admin',
         isActive: true,
         createdAt: '2024-01-01'
@@ -31,6 +31,7 @@ const Users: React.FC = () => {
         id: '2',
         email: 'preparador@sanse.com',
         fullName: 'Preparador Físico',
+        password: 'preparador123', // CONTRASEÑA INICIAL
         role: 'preparador',
         isActive: true,
         createdAt: '2024-01-02'
@@ -39,6 +40,7 @@ const Users: React.FC = () => {
         id: '3',
         email: 'maria.garcia@sanse.com',
         fullName: 'María García López',
+        password: 'maria123', // CONTRASEÑA INICIAL
         role: 'preparador',
         isActive: true,
         createdAt: '2024-01-03'
@@ -56,7 +58,6 @@ const Users: React.FC = () => {
     role: 'preparador' as 'admin' | 'preparador'
   });
 
-  // Guardar usuarios en localStorage cuando cambien
   useEffect(() => {
     localStorage.setItem('users', JSON.stringify(users));
   }, [users]);
@@ -67,6 +68,7 @@ const Users: React.FC = () => {
       id: (users.length + 1).toString(),
       email: formData.email,
       fullName: formData.fullName,
+      password: formData.password || 'default123', // CONTRASEÑA POR DEFECTO
       role: formData.role,
       isActive: true,
       createdAt: new Date().toISOString().split('T')[0]
@@ -83,7 +85,7 @@ const Users: React.FC = () => {
     setFormData({
       email: user.email,
       fullName: user.fullName,
-      password: '',
+      password: '', // DEJAR VACÍO PARA NO MOSTRAR LA CONTRASEÑA ACTUAL
       role: user.role
     });
     setShowForm(true);
@@ -94,7 +96,14 @@ const Users: React.FC = () => {
     if (editingUser) {
       const updatedUsers = users.map(u =>
         u.id === editingUser.id
-          ? { ...u, email: formData.email, fullName: formData.fullName, role: formData.role }
+          ? { 
+              ...u, 
+              email: formData.email, 
+              fullName: formData.fullName, 
+              role: formData.role,
+              // SI SE INGRESÓ NUEVA CONTRASEÑA, ACTUALIZARLA
+              password: formData.password ? formData.password : u.password
+            }
           : u
       );
       setUsers(updatedUsers);
@@ -171,14 +180,17 @@ const Users: React.FC = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Contraseña {!editingUser && '*'}</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  Contraseña {!editingUser && '*'}
+                  {editingUser && <span className="text-gray-500 text-sm"> (Dejar vacío para mantener la actual)</span>}
+                </label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-md"
                   required={!editingUser}
-                  placeholder={editingUser ? "Dejar vacío para no cambiar" : ""}
+                  placeholder={editingUser ? "Nueva contraseña (opcional)" : "Contraseña"}
                 />
               </div>
               <div>
