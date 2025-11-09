@@ -42,10 +42,9 @@ const Exercises: React.FC = () => {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadData();
-  }, []);
+useEffect(() => {
+  loadData();
+}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filtrar ejercicios
   const filteredExercises = exercises.filter(exercise => {
