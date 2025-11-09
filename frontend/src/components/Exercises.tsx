@@ -1,101 +1,57 @@
 import React, { useState, useEffect } from 'react';
-
-interface Category {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface Exercise {
-  id: string;
-  name: string;
-  description: string;
-  estimatedTime: number;
-  categoryId: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-  category?: Category;
-}
+import { exercisesApi, Exercise } from '../lib/supabaseExercises';
+import { categoriesApi, Category } from '../lib/supabaseCategories';
 
 const Exercises: React.FC = () => {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  //const [error] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [formLoading, setFormLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    estimatedTime: 10,
-    categoryId: ''
+    estimated_time: 10,
+    category_id: ''
   });
 
-  // Datos de ejemplo
-  useEffect(() => {
-    const mockCategories: Category[] = [
-      { id: '1', name: 'Calentamiento', color: 'bg-blue-100 text-blue-800' },
-      { id: '2', name: 'Resistencia', color: 'bg-green-100 text-green-800' },
-      { id: '3', name: 'Fuerza', color: 'bg-red-100 text-red-800' },
-      { id: '4', name: 'Velocidad', color: 'bg-yellow-100 text-yellow-800' },
-      { id: '5', name: 'Flexibilidad', color: 'bg-purple-100 text-purple-800' }
-    ];
-
-    const mockExercises: Exercise[] = [
-      {
-        id: '1',
-        name: 'Calentamiento articular',
-        description: 'Rotaciones de tobillos, rodillas, caderas, hombros y cuello',
-        estimatedTime: 10,
-        categoryId: '1',
-        createdBy: '1',
-        createdAt: '2024-01-15',
-        updatedAt: '2024-01-15',
-        category: mockCategories[0]
-      },
-      {
-        id: '2',
-        name: 'Carrera continua',
-        description: 'Trote suave alrededor del campo durante 15 minutos',
-        estimatedTime: 15,
-        categoryId: '2',
-        createdBy: '1',
-        createdAt: '2024-01-16',
-        updatedAt: '2024-01-16',
-        category: mockCategories[1]
-      },
-      {
-        id: '3',
-        name: 'Estaciones de fuerza',
-        description: 'Circuito con pesas, sentadillas, flexiones y abdominales',
-        estimatedTime: 25,
-        categoryId: '3',
-        createdBy: '1',
-        createdAt: '2024-01-17',
-        updatedAt: '2024-01-17',
-        category: mockCategories[2]
+  // Cargar datos desde Supabase
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [exercisesData, categoriesData] = await Promise.all([
+        exercisesApi.getExercises(),
+        categoriesApi.getCategories()
+      ]);
+      
+      setExercises(exercisesData);
+      setCategories(categoriesData);
+      
+      // Seleccionar primera categoría por defecto si no hay una seleccionada
+      if (categoriesData.length > 0 && !formData.category_id) {
+        setFormData(prev => ({ ...prev, category_id: categoriesData[0].id }));
       }
-    ];
-
-    setCategories(mockCategories);
-    setExercises(mockExercises);
-    setLoading(false);
-    
-    // Seleccionar primera categoría por defecto
-    if (mockCategories.length > 0 && !formData.categoryId) {
-      setFormData(prev => ({ ...prev, categoryId: mockCategories[0].id }));
+    } catch (error) {
+      console.error('Error loading data:', error);
+      alert('Error al cargar los datos');
+    } finally {
+      setLoading(false);
     }
-  }, [formData.categoryId]);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   // Filtrar ejercicios
   const filteredExercises = exercises.filter(exercise => {
     const matchesSearch = exercise.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          exercise.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || exercise.categoryId === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || exercise.category_id === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
@@ -105,8 +61,8 @@ const Exercises: React.FC = () => {
     setFormData({
       name: exercise.name,
       description: exercise.description,
-      estimatedTime: exercise.estimatedTime,
-      categoryId: exercise.categoryId
+      estimated_time: exercise.estimated_time,
+      category_id: exercise.category_id
     });
     setShowForm(true);
   };
@@ -117,57 +73,63 @@ const Exercises: React.FC = () => {
     setFormData({
       name: '',
       description: '',
-      estimatedTime: 10,
-      categoryId: categories.length > 0 ? categories[0].id : ''
+      estimated_time: 10,
+      category_id: categories.length > 0 ? categories[0].id : ''
     });
     setShowForm(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormLoading(true);
     
-    if (editingExercise) {
-      // Editar ejercicio existente
-      const updatedExercises = exercises.map(ex =>
-        ex.id === editingExercise.id
-          ? {
-              ...ex,
-              name: formData.name,
-              description: formData.description,
-              estimatedTime: formData.estimatedTime,
-              categoryId: formData.categoryId,
-              updatedAt: new Date().toISOString().split('T')[0],
-              category: categories.find(cat => cat.id === formData.categoryId)
-            }
-          : ex
-      );
-      setExercises(updatedExercises);
-     
-    } else {
-      // Crear nuevo ejercicio
-      const newExercise: Exercise = {
-        id: (exercises.length + 1).toString(),
-        name: formData.name,
-        description: formData.description,
-        estimatedTime: formData.estimatedTime,
-        categoryId: formData.categoryId,
-        createdBy: '1',
-        createdAt: new Date().toISOString().split('T')[0],
-        updatedAt: new Date().toISOString().split('T')[0],
-        category: categories.find(cat => cat.id === formData.categoryId)
-      };
-      setExercises([...exercises, newExercise]);
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
       
+      if (editingExercise) {
+        // Editar ejercicio existente
+        const updatedExercise = await exercisesApi.updateExercise(editingExercise.id, {
+          name: formData.name,
+          description: formData.description,
+          estimated_time: formData.estimated_time,
+          category_id: formData.category_id
+        });
+        
+        setExercises(exercises.map(ex => ex.id === editingExercise.id ? updatedExercise : ex));
+        alert('Ejercicio actualizado exitosamente!');
+      } else {
+        // Crear nuevo ejercicio
+        const newExercise = await exercisesApi.createExercise({
+          name: formData.name,
+          description: formData.description,
+          estimated_time: formData.estimated_time,
+          category_id: formData.category_id,
+          created_by: user.id
+        });
+        
+        setExercises([...exercises, newExercise]);
+        alert('Ejercicio creado exitosamente!');
+      }
+      
+      resetForm();
+    } catch (error) {
+      console.error('Error saving exercise:', error);
+      alert('Error al guardar el ejercicio');
+    } finally {
+      setFormLoading(false);
     }
-    
-    resetForm();
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`¿Estás seguro de eliminar el ejercicio "${name}"?`)) {
-      const updatedExercises = exercises.filter(ex => ex.id !== id);
-      setExercises(updatedExercises);
-     
+      try {
+        await exercisesApi.deleteExercise(id);
+        setExercises(exercises.filter(ex => ex.id !== id));
+        alert('Ejercicio eliminado exitosamente!');
+      } catch (error) {
+        console.error('Error deleting exercise:', error);
+        alert('Error al eliminar el ejercicio');
+      }
     }
   };
 
@@ -184,6 +146,7 @@ const Exercises: React.FC = () => {
         <button
           onClick={() => setShowForm(true)}
           className="bg-sanse-red text-white px-4 py-2 rounded-md hover:bg-red-700"
+          disabled={formLoading}
         >
           + Nuevo Ejercicio
         </button>
@@ -234,6 +197,7 @@ const Exercises: React.FC = () => {
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue"
                 placeholder="Ej: Sentadillas, Flexiones, Carrera..."
                 required
+                disabled={formLoading}
               />
             </div>
 
@@ -246,6 +210,7 @@ const Exercises: React.FC = () => {
                 rows={3}
                 placeholder="Describe cómo realizar el ejercicio, técnicas, precauciones..."
                 required
+                disabled={formLoading}
               />
             </div>
 
@@ -254,22 +219,24 @@ const Exercises: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">Tiempo estimado (minutos) *</label>
                 <input
                   type="number"
-                  value={formData.estimatedTime}
-                  onChange={(e) => setFormData({ ...formData, estimatedTime: parseInt(e.target.value) || 1 })}
+                  value={formData.estimated_time}
+                  onChange={(e) => setFormData({ ...formData, estimated_time: parseInt(e.target.value) || 1 })}
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue"
                   min="1"
                   max="120"
                   required
+                  disabled={formLoading}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">Categoría *</label>
                 <select
-                  value={formData.categoryId}
-                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                  value={formData.category_id}
+                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue"
                   required
+                  disabled={formLoading}
                 >
                   <option value="">Selecciona una categoría</option>
                   {categories.map(category => (
@@ -282,14 +249,16 @@ const Exercises: React.FC = () => {
             <div className="flex gap-2">
               <button
                 type="submit"
-                className="bg-sanse-blue text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                className="bg-sanse-blue text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                disabled={formLoading}
               >
-                {editingExercise ? 'Actualizar Ejercicio' : 'Crear Ejercicio'}
+                {formLoading ? 'Guardando...' : (editingExercise ? 'Actualizar Ejercicio' : 'Crear Ejercicio')}
               </button>
               <button
                 type="button"
                 onClick={resetForm}
-                className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+                className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 disabled:opacity-50"
+                disabled={formLoading}
               >
                 Cancelar
               </button>
@@ -311,7 +280,7 @@ const Exercises: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2 ml-4">
                     <span className="bg-sanse-blue text-white px-2 py-1 rounded-full text-sm font-medium">
-                      ⏱️ {exercise.estimatedTime} min
+                      ⏱️ {exercise.estimated_time} min
                     </span>
                   </div>
                 </div>
@@ -323,13 +292,8 @@ const Exercises: React.FC = () => {
                     </span>
                   )}
                   <span className="text-sm text-gray-500">
-                    Creado: {new Date(exercise.createdAt).toLocaleDateString()}
+                    Creado: {new Date(exercise.created_at).toLocaleDateString()}
                   </span>
-                  {exercise.updatedAt !== exercise.createdAt && (
-                    <span className="text-sm text-gray-500">
-                      Editado: {new Date(exercise.updatedAt).toLocaleDateString()}
-                    </span>
-                  )}
                 </div>
               </div>
 
@@ -338,6 +302,7 @@ const Exercises: React.FC = () => {
                   onClick={() => handleEdit(exercise)}
                   className="text-blue-600 hover:text-blue-800 p-2 rounded-full hover:bg-blue-50"
                   title="Editar ejercicio"
+                  disabled={formLoading}
                 >
                   ✏️
                 </button>
@@ -345,6 +310,7 @@ const Exercises: React.FC = () => {
                   onClick={() => handleDelete(exercise.id, exercise.name)}
                   className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50"
                   title="Eliminar ejercicio"
+                  disabled={formLoading}
                 >
                   🗑️
                 </button>
@@ -354,7 +320,7 @@ const Exercises: React.FC = () => {
         ))}
       </div>
 
-      {filteredExercises.length === 0 && (
+      {filteredExercises.length === 0 && !loading && (
         <div className="text-center p-8 text-gray-500 bg-white rounded-lg shadow-md">
           {searchTerm || selectedCategory !== 'all' 
             ? 'No se encontraron ejercicios con los filtros aplicados.'
@@ -374,7 +340,7 @@ const Exercises: React.FC = () => {
             </div>
             <div className="p-3 bg-green-50 rounded-lg">
               <div className="text-2xl font-bold text-green-600">
-                {exercises.reduce((total, ex) => total + ex.estimatedTime, 0)}
+                {exercises.reduce((total, ex) => total + ex.estimated_time, 0)}
               </div>
               <div className="text-sm text-gray-600">Minutos totales</div>
             </div>
@@ -384,7 +350,7 @@ const Exercises: React.FC = () => {
             </div>
             <div className="p-3 bg-orange-50 rounded-lg">
               <div className="text-2xl font-bold text-orange-600">
-                {(exercises.reduce((total, ex) => total + ex.estimatedTime, 0) / exercises.length).toFixed(1)}
+                {exercises.length > 0 ? (exercises.reduce((total, ex) => total + ex.estimated_time, 0) / exercises.length).toFixed(1) : '0'}
               </div>
               <div className="text-sm text-gray-600">Promedio minutos</div>
             </div>
