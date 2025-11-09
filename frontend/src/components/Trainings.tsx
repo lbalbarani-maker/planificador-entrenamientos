@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Training, Exercise, Category, TrainingExercise } from '../types/training';
 import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
 
-
 const Trainings: React.FC = () => {
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [draggedItem, setDraggedItem] = useState<number | null>(null);
-  
+
   // Estados para el formulario de entrenamiento
   const [showForm, setShowForm] = useState(false);
   const [editingTraining, setEditingTraining] = useState<Training | null>(null);
@@ -116,10 +115,11 @@ const Trainings: React.FC = () => {
   }, []);
 
   // Efecto para actualizar tiempo total cuando cambia el carrito
-useEffect(() => {
-  const total = cartExercises.reduce((sum, item) => sum + item.customTime, 0);
-  setTotalTime(total);
-}, [cartExercises]);
+  useEffect(() => {
+    const total = cartExercises.reduce((sum, item) => sum + item.customTime, 0);
+    setTotalTime(total);
+  }, [cartExercises]);
+
   // Filtrar ejercicios por categorías seleccionadas
   const filteredExercises = exercises.filter(exercise =>
     formData.categories.length === 0 || formData.categories.includes(exercise.categoryId)
@@ -128,7 +128,7 @@ useEffect(() => {
   // Agregar ejercicio al carrito - CORREGIDO
   const addToCart = (exercise: Exercise) => {
     const existingItem = cartExercises.find(item => item.exerciseId === exercise.id);
-    
+   
     if (existingItem) {
       // Si ya existe, aumentar tiempo en 5 minutos
       const updatedCart = cartExercises.map(item =>
@@ -170,41 +170,35 @@ useEffect(() => {
     setCartExercises(updatedCart);
   };
 
-  // Efecto para actualizar tiempo total cuando cambia el carrito - CORREGIDO
-useEffect(() => {
-  const total = cartExercises.reduce((sum, item) => sum + item.customTime, 0);
-  setTotalTime(total);
-}, [cartExercises]);
-
   // Mover ejercicio hacia arriba
   const moveExerciseUp = (index: number) => {
     if (index === 0) return; // Ya está en la parte superior
-    
+   
     const newCart = [...cartExercises];
     [newCart[index - 1], newCart[index]] = [newCart[index], newCart[index - 1]];
-    
+   
     // Actualizar órdenes
     const reorderedCart = newCart.map((item, idx) => ({
       ...item,
       order: idx + 1
     }));
-    
+   
     setCartExercises(reorderedCart);
   };
 
   // Mover ejercicio hacia abajo
   const moveExerciseDown = (index: number) => {
     if (index === cartExercises.length - 1) return; // Ya está en la parte inferior
-    
+   
     const newCart = [...cartExercises];
     [newCart[index], newCart[index + 1]] = [newCart[index + 1], newCart[index]];
-    
+   
     // Actualizar órdenes
     const reorderedCart = newCart.map((item, idx) => ({
       ...item,
       order: idx + 1
     }));
-    
+   
     setCartExercises(reorderedCart);
   };
 
@@ -220,17 +214,14 @@ useEffect(() => {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetIndex: number) => {
     e.preventDefault();
     if (draggedItem === null || draggedItem === targetIndex) return;
-
     const newCart = [...cartExercises];
     const [movedItem] = newCart.splice(draggedItem, 1);
     newCart.splice(targetIndex, 0, movedItem);
-
     // Actualizar órdenes
     const reorderedCart = newCart.map((item, idx) => ({
       ...item,
       order: idx + 1
     }));
-
     setCartExercises(reorderedCart);
     setDraggedItem(null);
   };
@@ -261,16 +252,20 @@ useEffect(() => {
   // Crear o actualizar entrenamiento
   const handleSaveTraining = (e: React.FormEvent) => {
     e.preventDefault();
-    
+   
     if (cartExercises.length === 0) {
       alert('Agrega al menos un ejercicio al entrenamiento');
       return;
     }
-
     if (!formData.name.trim()) {
       alert('El nombre del entrenamiento es requerido');
       return;
     }
+
+    // MODIFICACIÓN 1: Extraer IDs de categorías únicos de los ejercicios en el carrito
+    const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item => 
+      item.exercise?.categoryId
+    ).filter(Boolean))) as string[];
 
     if (editingTraining) {
       // Actualizar entrenamiento existente
@@ -279,7 +274,8 @@ useEffect(() => {
           ? {
               ...t,
               name: formData.name,
-              categories: formData.categories,
+              // MODIFICACIÓN 1: Usar categorías de los ejercicios en lugar del formulario
+              categories: uniqueCategoryIds,
               exercises: cartExercises,
               totalTime: totalTime,
               observations: formData.observations,
@@ -288,13 +284,14 @@ useEffect(() => {
           : t
       );
       setTrainings(updatedTrainings);
-      
+     
     } else {
       // Crear nuevo entrenamiento
       const newTraining: Training = {
         id: (trainings.length + 1).toString(),
         name: formData.name,
-        categories: formData.categories,
+        // MODIFICACIÓN 1: Usar categorías de los ejercicios en lugar del formulario
+        categories: uniqueCategoryIds,
         exercises: cartExercises,
         totalTime: totalTime,
         observations: formData.observations,
@@ -304,9 +301,9 @@ useEffect(() => {
         shareId: Math.random().toString(36).substring(2, 10).toUpperCase()
       };
       setTrainings([...trainings, newTraining]);
-      
+     
     }
-    
+   
     resetForm();
   };
 
@@ -321,240 +318,256 @@ useEffect(() => {
     });
   };
 
-// Descargar PDF del entrenamiento - VERSIÓN SIMPLIFICADA Y FUNCIONAL
-const downloadPDF = async (training: Training) => {
-  try {
-    // Obtener información del usuario actual
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const currentDate = new Date().toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-
-    // Calcular distribución de tiempos por categoría
-    const categoryTimes: {[key: string]: {name: string, time: number, color: string}} = {};
-    
-    training.exercises.forEach(exerciseItem => {
-      const exercise = exerciseItem.exercise;
-      if (exercise && exercise.category) {
-        const categoryId = exercise.category.id;
-        if (!categoryTimes[categoryId]) {
-          categoryTimes[categoryId] = {
-            name: exercise.category.name,
-            time: 0,
-            color: exercise.category.color
-          };
-        }
-        categoryTimes[categoryId].time += exerciseItem.customTime;
-      }
-    });
-
-    const categoryArray = Object.values(categoryTimes);
-    const totalTime = training.totalTime;
-
-    // Mapeo de colores
-  const getCategoryColor = (tailwindClass: string) => {
-  // Extraer solo la clase de color de fondo (primera parte antes del espacio)
-  const baseColorClass = tailwindClass ? tailwindClass.split(' ')[0] : '';
-  
-  const colorMap: {[key: string]: {bg: string, text: string, border: string}} = {
-    'bg-blue-100': { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' },
-    'bg-red-100': { bg: '#fee2e2', text: '#dc2626', border: '#ef4444' },
-    'bg-green-100': { bg: '#dcfce7', text: '#16a34a', border: '#22c55e' },
-    'bg-yellow-100': { bg: '#fef9c3', text: '#ca8a04', border: '#eab308' },
-    'bg-purple-100': { bg: '#f3e8ff', text: '#9333ea', border: '#a855f7' },
-    'bg-orange-100': { bg: '#ffedd5', text: '#ea580c', border: '#f97316' },
-    'bg-pink-100': { bg: '#fce7f3', text: '#db2777', border: '#ec4899' },
-    'bg-indigo-100': { bg: '#e0e7ff', text: '#4338ca', border: '#6366f1' }
-  };
-  return colorMap[baseColorClass] || { bg: '#e5e7eb', text: '#374151', border: '#9ca3af' };
-};
-
-    // Crear contenido HTML para el PDF
-    const pdfHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${training.name} - Sanse Complutense</title>
-          <style>
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 0; 
-              padding: 20px; 
-              color: #1f2937;
-            }
-            .header {
-              background: linear-gradient(135deg, #D32F2F 0%, #B71C1C 100%);
-              color: white;
-              padding: 30px;
-              text-align: center;
-              border-radius: 10px;
-              margin-bottom: 20px;
-            }
-            .metrics {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 20px;
-              margin: 20px 0;
-            }
-            .metric-card {
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white;
-              padding: 20px;
-              border-radius: 10px;
-              text-align: center;
-            }
-            .exercise-card {
-              border: 2px solid #e3f2fd;
-              border-radius: 10px;
-              padding: 15px;
-              margin: 10px 0;
-              background: white;
-            }
-            .distribution-bar {
-              display: flex;
-              height: 30px;
-              border-radius: 8px;
-              overflow: hidden;
-              background: #e2e8f0;
-              margin: 15px 0;
-            }
-            .footer {
-              background: #1e293b;
-              color: white;
-              padding: 20px;
-              text-align: center;
-              margin-top: 30px;
-              border-radius: 8px;
-            }
-            @media print {
-              body { margin: 0; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1 style="margin: 0 0 10px 0;">SANSE COMPLUTENSE</h1>
-            <p style="margin: 0 0 20px 0; opacity: 0.9;">Club de Hockey Hierba</p>
-            <h2 style="margin: 0 0 15px 0;">${training.name}</h2>
-            
-            <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; text-align: left;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span>Preparador físico:</span>
-                <span style="font-weight: bold;">${user.fullName || 'Usuario'}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span>Fecha:</span>
-                <span style="font-weight: bold;">${currentDate}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span>Duración total:</span>
-                <span style="font-weight: bold;">${training.totalTime} minutos</span>
-              </div>
-            </div>
-          </div>
-
-          ${training.observations ? `
-            <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0ea5e9; margin-bottom: 20px;">
-              <h3 style="color: #1565C0; margin: 0 0 10px 0;">📝 Observaciones</h3>
-              <p style="margin: 0; line-height: 1.5;">${training.observations}</p>
-            </div>
-          ` : ''}
-
-          <div class="metrics">
-            <div class="metric-card">
-              <div style="font-size: 32px; font-weight: bold;">${training.exercises.length}</div>
-              <div>EJERCICIOS</div>
-            </div>
-            <div class="metric-card">
-              <div style="font-size: 32px; font-weight: bold;">${training.totalTime}</div>
-              <div>MINUTOS TOTALES</div>
-            </div>
-          </div>
-
-          <h3 style="color: #1565C0; border-bottom: 2px solid #e3f2fd; padding-bottom: 10px;">💪 Ejercicios del Entrenamiento</h3>
-          
-          ${training.exercises.map((item, index) => {
-            const exercise = item.exercise;
-            const category = exercise?.category;
-            const colors = category ? getCategoryColor(category.color) : { bg: '#e5e7eb', text: '#374151', border: '#9ca3af' };
-            
-            return `
-              <div class="exercise-card">
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                  <div style="background: #1565C0; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">
-                    ${index + 1}
-                  </div>
-                  <h4 style="margin: 0; color: #1565C0;">${exercise?.name || 'Ejercicio'}</h4>
-                </div>
-                <p style="margin: 0 0 10px 0; color: #6b7280; padding-left: 38px;">${exercise?.description || 'Sin descripción disponible'}</p>
-                <div style="display: flex; gap: 10px; padding-left: 38px;">
-                  <span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 15px; font-weight: bold;">
-                    ⏱️ ${item.customTime} min
-                  </span>
-                  ${category ? `
-                    <span style="background: ${colors.bg}; color: ${colors.text}; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid ${colors.border};">
-                      ${category.name}
-                    </span>
-                  ` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
-
-          <div style="background: #f8fafc; padding: 20px; border-radius: 10px; margin: 25px 0;">
-            <h3 style="color: #1565C0; margin: 0 0 15px 0;">📊 Distribución de Tiempos por Categoría</h3>
-            
-            <div class="distribution-bar">
-              ${categoryArray.map(category => {
-                const percentage = (category.time / totalTime) * 100;
-                const colors = getCategoryColor(category.color);
-                return `<div style="width: ${percentage}%; background: ${colors.border};"></div>`;
-              }).join('')}
-            </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 15px;">
-              ${categoryArray.map(category => {
-                const percentage = (category.time / totalTime) * 100;
-                const colors = getCategoryColor(category.color);
-                return `
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <div style="width: 12px; height: 12px; background: ${colors.border}; border-radius: 2px;"></div>
-                    <span style="font-weight: bold;">${category.name}:</span>
-                    <span>${category.time}min (${percentage.toFixed(1)}%)</span>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
-
-          <div class="footer">
-            <p style="margin: 0; opacity: 0.8;">Generado automáticamente por el Planificador de Entrenamientos Sanse Complutense</p>
-            <p style="margin: 5px 0 0 0; opacity: 0.8;">${window.location.origin}</p>
-          </div>
-        </body>
-      </html>
-    `;
-
-    // Abrir ventana para imprimir/guardar como PDF
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(pdfHTML);
-      printWindow.document.close();
-      printWindow.focus();
+  // Descargar PDF del entrenamiento - VERSIÓN SIMPLIFICADA Y FUNCIONAL
+  const downloadPDF = async (training: Training) => {
+    try {
+      // Obtener información del usuario actual
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const currentDate = new Date().toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
       
-      // Esperar un momento y luego mostrar el diálogo de impresión
-      setTimeout(() => {
-        printWindow.print();
-      }, 500);
-    }
+      // Calcular distribución de tiempos por categoría
+      const categoryTimes: {[key: string]: {name: string, time: number, color: string}} = {};
+     
+      training.exercises.forEach(exerciseItem => {
+        const exercise = exerciseItem.exercise;
+        if (exercise && exercise.category) {
+          const categoryId = exercise.category.id;
+          if (!categoryTimes[categoryId]) {
+            categoryTimes[categoryId] = {
+              name: exercise.category.name,
+              time: 0,
+              color: exercise.category.color
+            };
+          }
+          categoryTimes[categoryId].time += exerciseItem.customTime;
+        }
+      });
 
-  } catch (error) {
-    console.error('Error generando PDF:', error);
-    alert('Error al generar el PDF. Por favor, intenta nuevamente.');
-  }
-};
+      const categoryArray = Object.values(categoryTimes);
+      const totalTime = training.totalTime;
+      
+      // Mapeo de colores
+      const getCategoryColor = (tailwindClass: string) => {
+        // Extraer solo la clase de color de fondo (primera parte antes del espacio)
+        const baseColorClass = tailwindClass ? tailwindClass.split(' ')[0] : '';
+     
+        const colorMap: {[key: string]: {bg: string, text: string, border: string}} = {
+          'bg-blue-100': { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' },
+          'bg-red-100': { bg: '#fee2e2', text: '#dc2626', border: '#ef4444' },
+          'bg-green-100': { bg: '#dcfce7', text: '#16a34a', border: '#22c55e' },
+          'bg-yellow-100': { bg: '#fef9c3', text: '#ca8a04', border: '#eab308' },
+          'bg-purple-100': { bg: '#f3e8ff', text: '#9333ea', border: '#a855f7' },
+          'bg-orange-100': { bg: '#ffedd5', text: '#ea580c', border: '#f97316' },
+          'bg-pink-100': { bg: '#fce7f3', text: '#db2777', border: '#ec4899' },
+          'bg-indigo-100': { bg: '#e0e7ff', text: '#4338ca', border: '#6366f1' }
+        };
+     
+        return colorMap[baseColorClass] || { bg: '#e5e7eb', text: '#374151', border: '#9ca3af' };
+      };
+
+      // MODIFICACIÓN 2: Verificar si hay ejercicios sin categoría
+      const exercisesWithoutCategory = training.exercises.filter(item => !item.exercise?.category);
+      if (exercisesWithoutCategory.length > 0) {
+        console.warn(`${exercisesWithoutCategory.length} ejercicios sin categoría asignada`);
+      }
+
+      // Crear contenido HTML para el PDF
+      const pdfHTML = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>${training.name} - Sanse Complutense</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 20px;
+                color: #1f2937;
+              }
+              .header {
+                background: linear-gradient(135deg, #D32F2F 0%, #B71C1C 100%);
+                color: white;
+                padding: 30px;
+                text-align: center;
+                border-radius: 10px;
+                margin-bottom: 20px;
+              }
+              .metrics {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+                margin: 20px 0;
+              }
+              .metric-card {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 20px;
+                border-radius: 10px;
+                text-align: center;
+              }
+              .exercise-card {
+                border: 2px solid #e3f2fd;
+                border-radius: 10px;
+                padding: 15px;
+                margin: 10px 0;
+                background: white;
+              }
+              .distribution-bar {
+                display: flex;
+                height: 30px;
+                border-radius: 8px;
+                overflow: hidden;
+                background: #e2e8f0;
+                margin: 15px 0;
+              }
+              .footer {
+                background: #1e293b;
+                color: white;
+                padding: 20px;
+                text-align: center;
+                margin-top: 30px;
+                border-radius: 8px;
+              }
+              @media print {
+                body { margin: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1 style="margin: 0 0 10px 0;">SANSE COMPLUTENSE</h1>
+              <p style="margin: 0 0 20px 0; opacity: 0.9;">Club de Hockey Hierba</p>
+              <h2 style="margin: 0 0 15px 0;">${training.name}</h2>
+             
+              <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; text-align: left;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span>Preparador físico:</span>
+                  <span style="font-weight: bold;">${user.fullName || 'Usuario'}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span>Fecha:</span>
+                  <span style="font-weight: bold;">${currentDate}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Duración total:</span>
+                  <span style="font-weight: bold;">${training.totalTime} minutos</span>
+                </div>
+              </div>
+            </div>
+            ${training.observations ? `
+              <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0ea5e9; margin-bottom: 20px;">
+                <h3 style="color: #1565C0; margin: 0 0 10px 0;">📝 Observaciones</h3>
+                <p style="margin: 0; line-height: 1.5;">${training.observations}</p>
+              </div>
+            ` : ''}
+            <div class="metrics">
+              <div class="metric-card">
+                <div style="font-size: 32px; font-weight: bold;">${training.exercises.length}</div>
+                <div>EJERCICIOS</div>
+              </div>
+              <div class="metric-card">
+                <div style="font-size: 32px; font-weight: bold;">${training.totalTime}</div>
+                <div>MINUTOS TOTALES</div>
+              </div>
+            </div>
+            <h3 style="color: #1565C0; border-bottom: 2px solid #e3f2fd; padding-bottom: 10px;">💪 Ejercicios del Entrenamiento</h3>
+           
+            ${training.exercises.map((item, index) => {
+              const exercise = item.exercise;
+              const category = exercise?.category;
+              const colors = category ? getCategoryColor(category.color) : { bg: '#e5e7eb', text: '#374151', border: '#9ca3af' };
+             
+              return `
+                <div class="exercise-card">
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <div style="background: #1565C0; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                      ${index + 1}
+                    </div>
+                    <h4 style="margin: 0; color: #1565C0;">${exercise?.name || 'Ejercicio'}</h4>
+                  </div>
+                  <p style="margin: 0 0 10px 0; color: #6b7280; padding-left: 38px;">${exercise?.description || 'Sin descripción disponible'}</p>
+                  <div style="display: flex; gap: 10px; padding-left: 38px;">
+                    <span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 15px; font-weight: bold;">
+                      ⏱️ ${item.customTime} min
+                    </span>
+                    ${category ? `
+                      <span style="background: ${colors.bg}; color: ${colors.text}; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid ${colors.border};">
+                        ${category.name}
+                      </span>
+                    ` : `
+                      <span style="background: #e5e7eb; color: #374151; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid #9ca3af;">
+                        Sin categoría
+                      </span>
+                    `}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+            <div style="background: #f8fafc; padding: 20px; border-radius: 10px; margin: 25px 0;">
+              <h3 style="color: #1565C0; margin: 0 0 15px 0;">📊 Distribución de Tiempos por Categoría</h3>
+             
+              <div class="distribution-bar">
+                ${categoryArray.map(category => {
+                  const percentage = (category.time / totalTime) * 100;
+                  const colors = getCategoryColor(category.color);
+                  return `<div style="width: ${percentage}%; background: ${colors.border};"></div>`;
+                }).join('')}
+                ${categoryArray.length === 0 ? `
+                  <div style="width: 100%; background: #9ca3af; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                    Sin categorías
+                  </div>
+                ` : ''}
+              </div>
+             
+              ${categoryArray.length > 0 ? `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 15px;">
+                  ${categoryArray.map(category => {
+                    const percentage = (category.time / totalTime) * 100;
+                    const colors = getCategoryColor(category.color);
+                    return `
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 12px; height: 12px; background: ${colors.border}; border-radius: 2px;"></div>
+                        <span style="font-weight: bold;">${category.name}:</span>
+                        <span>${category.time}min (${percentage.toFixed(1)}%)</span>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              ` : `
+                <div style="text-align: center; color: #6b7280; margin-top: 15px;">
+                  No hay datos de categorías disponibles
+                </div>
+              `}
+            </div>
+            <div class="footer">
+              <p style="margin: 0; opacity: 0.8;">Generado automáticamente por el Planificador de Entrenamientos Sanse Complutense</p>
+              <p style="margin: 5px 0 0 0; opacity: 0.8;">${window.location.origin}</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      // Abrir ventana para imprimir/guardar como PDF
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(pdfHTML);
+        printWindow.document.close();
+        printWindow.focus();
+       
+        // Esperar un momento y luego mostrar el diálogo de impresión
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error generando PDF:', error);
+      alert('Error al generar el PDF. Por favor, intenta nuevamente.');
+    }
+  };
 
   // Eliminar entrenamiento
   const handleDeleteTraining = (id: string, name: string) => {
@@ -625,43 +638,34 @@ const downloadPDF = async (training: Training) => {
                 ✕
               </button>
             </div>
-
             <div className="flex flex-1 overflow-hidden">
               {/* Columna izquierda - Lista de ejercicios */}
               <div className="w-1/2 border-r p-6 overflow-y-auto">
                 <h3 className="text-xl font-semibold mb-4">Ejercicios Disponibles</h3>
-                
-                {/* Filtros por categoría */}
+               
+                {/* MODIFICACIÓN 3: Eliminar filtros por categoría del formulario */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Filtrar por categoría:
+                    Categorías disponibles:
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {categories.map(category => (
-                      <button
+                      <span
                         key={category.id}
-                        type="button"
-                        className={`px-3 py-2 rounded-full text-sm font-medium transition-colors ${
-                          formData.categories.includes(category.id)
-                            ? category.color
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                        onClick={() => {
-                          const updatedCategories = formData.categories.includes(category.id)
-                            ? formData.categories.filter(id => id !== category.id)
-                            : [...formData.categories, category.id];
-                          setFormData({ ...formData, categories: updatedCategories });
-                        }}
+                        className={`px-3 py-2 rounded-full text-sm font-medium ${category.color}`}
                       >
                         {category.name}
-                      </button>
+                      </span>
                     ))}
                   </div>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Las categorías se asignarán automáticamente según los ejercicios seleccionados
+                  </p>
                 </div>
 
                 {/* Lista de ejercicios filtrados */}
                 <div className="space-y-3">
-                  {filteredExercises.map(exercise => (
+                  {exercises.map(exercise => (
                     <div key={exercise.id} className="bg-gray-50 p-4 rounded-lg border hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
@@ -685,13 +689,10 @@ const downloadPDF = async (training: Training) => {
                       </div>
                     </div>
                   ))}
-                  
-                  {filteredExercises.length === 0 && (
+                 
+                  {exercises.length === 0 && (
                     <div className="text-center p-8 text-gray-500">
-                      {formData.categories.length > 0 
-                        ? 'No hay ejercicios en las categorías seleccionadas'
-                        : 'No hay ejercicios disponibles'
-                      }
+                      No hay ejercicios disponibles
                     </div>
                   )}
                 </div>
@@ -727,7 +728,7 @@ const downloadPDF = async (training: Training) => {
                         </p>
                       )}
                     </div>
-                    
+                   
                     {cartExercises.length === 0 ? (
                       <div className="text-center p-8 text-gray-500 bg-gray-50 rounded-lg">
                         <p>Agrega ejercicios desde la columna izquierda</p>
@@ -736,8 +737,8 @@ const downloadPDF = async (training: Training) => {
                     ) : (
                       <div className="space-y-3">
                         {cartExercises.map((item, index) => (
-                          <div 
-                            key={item.exerciseId} 
+                          <div
+                            key={item.exerciseId}
                             className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-move ${
                               draggedItem === index ? 'opacity-50 border-sanse-blue' : ''
                             }`}
@@ -776,7 +777,7 @@ const downloadPDF = async (training: Training) => {
                                   )}
                                 </div>
                               </div>
-                              
+                             
                               <div className="flex flex-col gap-1 ml-2">
                                 {/* Botones para mover */}
                                 <div className="flex gap-1">
@@ -797,7 +798,7 @@ const downloadPDF = async (training: Training) => {
                                     ↓
                                   </button>
                                 </div>
-                                
+                               
                                 <button
                                   onClick={() => removeFromCart(item.exerciseId)}
                                   className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
@@ -834,7 +835,7 @@ const downloadPDF = async (training: Training) => {
                     <span className="text-lg font-semibold">Tiempo total estimado:</span>
                     <span className="text-2xl font-bold text-sanse-blue">{totalTime} minutos</span>
                   </div>
-                  
+                 
                   <div className="flex gap-2">
                     <button
                       onClick={handleSaveTraining}
@@ -860,7 +861,7 @@ const downloadPDF = async (training: Training) => {
       {/* Lista de entrenamientos existentes */}
       <div className="mt-8">
         <h2 className="text-2xl font-bold text-sanse-blue mb-6">Entrenamientos Existentes</h2>
-        
+       
         {trainings.length === 0 ? (
           <div className="text-center p-8 text-gray-500 bg-white rounded-lg shadow-md">
             No hay entrenamientos creados. ¡Crea el primero!
@@ -877,11 +878,11 @@ const downloadPDF = async (training: Training) => {
                         <span>Editado: {new Date(training.updatedAt).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    
+                   
                     {training.observations && (
                       <p className="text-gray-600 mb-3">{training.observations}</p>
                     )}
-                    
+                   
                     <div className="flex items-center gap-6 text-sm mb-3">
                       <span className="flex items-center gap-1">
                         ⏱️ <strong>{training.totalTime} min</strong> total
@@ -922,7 +923,6 @@ const downloadPDF = async (training: Training) => {
                       ))}
                     </div>
                   </div>
-
                   <div className="flex gap-2 ml-6 flex-col">
                     <button
                       onClick={() => handleEdit(training)}
