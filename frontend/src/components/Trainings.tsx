@@ -148,10 +148,10 @@ const Trainings: React.FC = () => {
   }, []);
 
   // Efecto para actualizar tiempo total cuando cambia el carrito
-  useEffect(() => {
-    updateTotalTime();
- }, [cartExercises, updateTotalTime]);
-
+useEffect(() => {
+  const total = cartExercises.reduce((sum, item) => sum + item.customTime, 0);
+  setTotalTime(total);
+}, [cartExercises]);
   // Filtrar ejercicios por categorías seleccionadas
   const filteredExercises = exercises.filter(exercise =>
     formData.categories.length === 0 || formData.categories.includes(exercise.categoryId)
@@ -202,11 +202,11 @@ const Trainings: React.FC = () => {
     setCartExercises(updatedCart);
   };
 
-  // Calcular tiempo total - FUNCIÓN CORREGIDA
-  const updateTotalTime = () => {
-    const total = cartExercises.reduce((sum, item) => sum + item.customTime, 0);
-    setTotalTime(total);
-  };
+  // Efecto para actualizar tiempo total cuando cambia el carrito - CORREGIDO
+useEffect(() => {
+  const total = cartExercises.reduce((sum, item) => sum + item.customTime, 0);
+  setTotalTime(total);
+}, [cartExercises]);
 
   // Mover ejercicio hacia arriba
   const moveExerciseUp = (index: number) => {

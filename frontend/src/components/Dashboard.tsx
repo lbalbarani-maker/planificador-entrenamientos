@@ -105,20 +105,7 @@ const Dashboard: React.FC = () => {
     </div>
   );
 
-  // Vista temporal de módulos
   
-    <div className="bg-white p-8 rounded-lg shadow-md text-center">
-      <h2 className="text-2xl font-bold text-sanse-blue mb-4">{title}</h2>
-      <p className="text-gray-600 mb-6">{description}</p>
-      <button
-        onClick={() => setCurrentView('dashboard')}
-        className="bg-sanse-blue text-white px-4 py-2 rounded-md hover:bg-blue-700"
-      >
-        Volver al Dashboard
-      </button>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
