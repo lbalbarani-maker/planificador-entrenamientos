@@ -10,19 +10,15 @@ interface User {
 }
 
 const Users: React.FC = () => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formData, setFormData] = useState({
-    email: '',
-    fullName: '',
-    password: '',
-    role: 'preparador' as 'admin' | 'preparador'
-  });
-
-  // Datos de ejemplo
-  useEffect(() => {
-    const mockUsers: User[] = [
+  const [users, setUsers] = useState<User[]>(() => {
+    // Cargar usuarios desde localStorage al iniciar
+    const savedUsers = localStorage.getItem('users');
+    if (savedUsers) {
+      return JSON.parse(savedUsers);
+    }
+    
+    // Si no hay usuarios guardados, usar los mock iniciales
+    const initialUsers: User[] = [
       {
         id: '1',
         email: 'admin@sanse.com',
@@ -48,8 +44,22 @@ const Users: React.FC = () => {
         createdAt: '2024-01-03'
       }
     ];
-    setUsers(mockUsers);
-  }, []);
+    return initialUsers;
+  });
+
+  const [showForm, setShowForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [formData, setFormData] = useState({
+    email: '',
+    fullName: '',
+    password: '',
+    role: 'preparador' as 'admin' | 'preparador'
+  });
+
+  // Guardar usuarios en localStorage cuando cambien
+  useEffect(() => {
+    localStorage.setItem('users', JSON.stringify(users));
+  }, [users]);
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +101,7 @@ const Users: React.FC = () => {
       setShowForm(false);
       setEditingUser(null);
       setFormData({ email: '', fullName: '', password: '', role: 'preparador' });
-     
+      alert('Usuario actualizado exitosamente!');
     }
   };
 
@@ -103,7 +113,7 @@ const Users: React.FC = () => {
       }
       const updatedUsers = users.filter(u => u.id !== id);
       setUsers(updatedUsers);
-      
+      alert('Usuario eliminado exitosamente!');
     }
   };
 
