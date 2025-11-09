@@ -50,7 +50,7 @@ const PublicTraining: React.FC = () => {
   const [showAlert, setShowAlert] = useState(false);
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+ 
 
   // Datos de ejemplo (en producción vendrían de una API)
   useEffect(() => {

@@ -22,7 +22,7 @@ const Exercises: React.FC = () => {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,7 +89,7 @@ const Exercises: React.FC = () => {
     if (mockCategories.length > 0 && !formData.categoryId) {
       setFormData(prev => ({ ...prev, categoryId: mockCategories[0].id }));
     }
-  }, []);
+  }, [formData.categoryId]);
 
   // Filtrar ejercicios
   const filteredExercises = exercises.filter(exercise => {

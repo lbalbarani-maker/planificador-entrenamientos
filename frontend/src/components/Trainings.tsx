@@ -150,7 +150,7 @@ const Trainings: React.FC = () => {
   // Efecto para actualizar tiempo total cuando cambia el carrito
   useEffect(() => {
     updateTotalTime();
-  }, [cartExercises]);
+ }, [cartExercises, updateTotalTime]);
 
   // Filtrar ejercicios por categorías seleccionadas
   const filteredExercises = exercises.filter(exercise =>
