@@ -385,7 +385,7 @@ const Trainings: React.FC = () => {
           <body>
             <div class="header">
               <h1 style="margin: 0 0 10px 0;">SANSE COMPLUTENSE</h1>
-              <p style="margin: 0 0 20px 0; opacity: 0.9;">Club de Hockey Hierba</p>
+              <p style="margin: 0 0 20px 0; opacity: 0.9;">Club de Hockey</p>
               <h2 style="margin: 0 0 15px 0;">${training.name}</h2>
               <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; text-align: left;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
