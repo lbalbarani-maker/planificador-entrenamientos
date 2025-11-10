@@ -339,14 +339,7 @@ const downloadPDF = async (training: Training) => {
               background: #e2e8f0; 
               margin: 15px 0; 
             }
-            .footer { 
-              background: #1e293b; 
-              color: white; 
-              padding: 20px; 
-              text-align: center; 
-              margin-top: 30px; 
-              border-radius: 8px; 
-            }
+            
             @media print { 
               body { 
                 margin: 0; 
@@ -457,10 +450,7 @@ const downloadPDF = async (training: Training) => {
               </div>
             `}
           </div>
-          <div class="footer">
-            <p style="margin: 0; opacity: 0.8;">Generado automáticamente por el Planificador de Entrenamientos Sanse Complutense</p>
-            <p style="margin: 5px 0 0 0; opacity: 0.8;">${window.location.origin}</p>
-          </div>
+          
         </body>
       </html>
     `;
