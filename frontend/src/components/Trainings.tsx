@@ -236,7 +236,7 @@ const Trainings: React.FC = () => {
     });
   };
 
-  // Descargar PDF del entrenamiento
+// Descargar PDF del entrenamiento
 const downloadPDF = async (training: Training) => {
   try {
     const userData = localStorage.getItem('user');
@@ -265,9 +265,11 @@ const downloadPDF = async (training: Training) => {
       }
     });
 
+    // Estas variables SÍ se usan, déjalas
     const categoryArray = Object.values(categoryTimes);
     const totalTime = training.totalTime;
     
+    // Esta función SÍ se usa, déjala
     const getCategoryColor = (tailwindClass: string) => {
       const baseColorClass = tailwindClass ? tailwindClass.split(' ')[0] : '';
    
@@ -354,7 +356,6 @@ const downloadPDF = async (training: Training) => {
           </style>
         </head>
         <body>
-          <!-- El resto de tu contenido HTML igual -->
           <div class="header">
             <h1 style="margin: 0 0 10px 0;">SANSE COMPLUTENSE</h1>
             <p style="margin: 0 0 20px 0; opacity: 0.9;">Club de Hockey Hierba</p>
@@ -374,7 +375,92 @@ const downloadPDF = async (training: Training) => {
               </div>
             </div>
           </div>
-          <!-- ... resto del contenido ... -->
+          ${training.observations ? `
+            <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0ea5e9; margin-bottom: 20px;">
+              <h3 style="color: #1565C0; margin: 0 0 10px 0;">📝 Observaciones</h3>
+              <p style="margin: 0; line-height: 1.5;">${training.observations}</p>
+            </div>
+          ` : ''}
+          <div class="metrics">
+            <div class="metric-card">
+              <div style="font-size: 32px; font-weight: bold;">${training.exercises.length}</div>
+              <div>EJERCICIOS</div>
+            </div>
+            <div class="metric-card">
+              <div style="font-size: 32px; font-weight: bold;">${training.totalTime}</div>
+              <div>MINUTOS TOTALES</div>
+            </div>
+          </div>
+          <h3 style="color: #1565C0; border-bottom: 2px solid #e3f2fd; padding-bottom: 10px;">💪 Ejercicios del Entrenamiento</h3>
+          ${training.exercises.map((item: TrainingExercise, index: number) => {
+            const exercise = item.exercise;
+            const category = exercise?.category;
+            const colors = category ? getCategoryColor(category.color) : { bg: '#e5e7eb', text: '#374151', border: '#9ca3af' };
+           
+            return `
+              <div class="exercise-card">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                  <div style="background: #1565C0; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                    ${index + 1}
+                  </div>
+                  <h4 style="margin: 0; color: #1565C0;">${exercise?.name || 'Ejercicio'}</h4>
+                </div>
+                <p style="margin: 0 0 10px 0; color: #6b7280; padding-left: 38px;">${exercise?.description || 'Sin descripción disponible'}</p>
+                <div style="display: flex; gap: 10px; padding-left: 38px;">
+                  <span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 15px; font-weight: bold;">
+                    ⏱️ ${item.customTime} min
+                  </span>
+                  ${category ? `
+                    <span style="background: ${colors.bg}; color: ${colors.text}; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid ${colors.border};">
+                      ${category.name}
+                    </span>
+                  ` : `
+                    <span style="background: #e5e7eb; color: #374151; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid #9ca3af;">
+                      Sin categoría
+                    </span>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join('')}
+          <div style="background: #f8fafc; padding: 20px; border-radius: 10px; margin: 25px 0;">
+            <h3 style="color: #1565C0; margin: 0 0 15px 0;">📊 Distribución de Tiempos por Categoría</h3>
+            <div class="distribution-bar">
+              ${categoryArray.map((category: any) => {
+                const percentage = (category.time / totalTime) * 100;
+                const colors = getCategoryColor(category.color);
+                return `<div style="width: ${percentage}%; background: ${colors.border};"></div>`;
+              }).join('')}
+              ${categoryArray.length === 0 ? `
+                <div style="width: 100%; background: #9ca3af; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                  Sin categorías
+                </div>
+              ` : ''}
+            </div>
+            ${categoryArray.length > 0 ? `
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 15px;">
+                ${categoryArray.map((category: any) => {
+                  const percentage = (category.time / totalTime) * 100;
+                  const colors = getCategoryColor(category.color);
+                  return `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div style="width: 12px; height: 12px; background: ${colors.border}; border-radius: 2px;"></div>
+                      <span style="font-weight: bold;">${category.name}:</span>
+                      <span>${category.time}min (${percentage.toFixed(1)}%)</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <div style="text-align: center; color: #6b7280; margin-top: 15px;">
+                No hay datos de categorías disponibles
+              </div>
+            `}
+          </div>
+          <div class="footer">
+            <p style="margin: 0; opacity: 0.8;">Generado automáticamente por el Planificador de Entrenamientos Sanse Complutense</p>
+            <p style="margin: 5px 0 0 0; opacity: 0.8;">${window.location.origin}</p>
+          </div>
         </body>
       </html>
     `;
