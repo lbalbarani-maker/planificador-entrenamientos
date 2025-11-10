@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Training, Exercise, Category, TrainingExercise } from '../types/training';
 import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
+import { supabase } from '../lib/supabase';
 
 const Trainings: React.FC = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -22,13 +26,27 @@ const Trainings: React.FC = () => {
   const [cartExercises, setCartExercises] = useState<TrainingExercise[]>([]);
   const [totalTime, setTotalTime] = useState(0);
 
-  // Cargar datos reales de Supabase
+  // Verificar autenticación al cargar el componente
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+      setUser(user);
+    };
+    
+    checkAuth();
+  }, [navigate]);
+
+  // Cargar datos
   useEffect(() => {
     const loadData = async () => {
+      if (!user) return;
+      
       try {
         setLoading(true);
-        
-        // Cargar datos reales de Supabase
         const [trainingsData, exercisesData, categoriesData] = await Promise.all([
           getTrainings(),
           getExercises(),
@@ -38,98 +56,21 @@ const Trainings: React.FC = () => {
         setTrainings(trainingsData || []);
         setExercises(exercisesData || []);
         setCategories(categoriesData || []);
-        
       } catch (error) {
-        console.error('Error cargando datos:', error);
-        // Fallback a datos mock si hay error
-        loadMockData();
+        console.error('Error loading data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadData();
-  }, []);
-
-  // Datos de ejemplo como fallback
-  const loadMockData = () => {
-    const mockCategories: Category[] = [
-      { id: '1', name: 'Calentamiento', color: 'bg-blue-100 text-blue-800' },
-      { id: '2', name: 'Resistencia', color: 'bg-green-100 text-green-800' },
-      { id: '3', name: 'Fuerza', color: 'bg-red-100 text-red-800' },
-      { id: '4', name: 'Velocidad', color: 'bg-yellow-100 text-yellow-800' },
-    ];
-
-    const mockExercises: Exercise[] = [
-      {
-        id: '1',
-        name: 'Calentamiento articular',
-        description: 'Rotaciones de tobillos, rodillas, caderas, hombros y cuello',
-        estimatedTime: 10,
-        categoryId: '1',
-        category: mockCategories[0]
-      },
-      {
-        id: '2',
-        name: 'Carrera continua',
-        description: 'Trote suave alrededor del campo durante 15 minutos',
-        estimatedTime: 15,
-        categoryId: '2',
-        category: mockCategories[1]
-      },
-      {
-        id: '3',
-        name: 'Estaciones de fuerza',
-        description: 'Circuito con pesas, sentadillas, flexiones y abdominales',
-        estimatedTime: 25,
-        categoryId: '3',
-        category: mockCategories[2]
-      },
-      {
-        id: '4',
-        name: 'Sprints',
-        description: 'Series de 100 metros a máxima velocidad',
-        estimatedTime: 20,
-        categoryId: '4',
-        category: mockCategories[3]
-      },
-      {
-        id: '5',
-        name: 'Estiramientos',
-        description: 'Rutina completa de estiramientos musculares',
-        estimatedTime: 15,
-        categoryId: '1',
-        category: mockCategories[0]
-      }
-    ];
-
-    const mockTrainings: Training[] = [
-      {
-        id: '1',
-        name: 'Entrenamiento Juveniles Semana 1',
-        categories: ['1', '2'],
-        exercises: [
-          { exerciseId: '1', customTime: 10, order: 1, exercise: mockExercises[0] },
-          { exerciseId: '2', customTime: 15, order: 2, exercise: mockExercises[1] },
-          { exerciseId: '5', customTime: 15, order: 3, exercise: mockExercises[4] }
-        ],
-        totalTime: 40,
-        observations: 'Enfocado en resistencia aeróbica y técnica básica',
-        createdBy: '1',
-        createdAt: '2024-01-20',
-        updatedAt: '2024-01-20',
-        shareId: 'abc123'
-      }
-    ];
-
-    setCategories(mockCategories);
-    setExercises(mockExercises);
-    setTrainings(mockTrainings);
-  };
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   // Efecto para actualizar tiempo total cuando cambia el carrito
   useEffect(() => {
-    const total = cartExercises.reduce((sum, item) => sum + item.customTime, 0);
+    const total = cartExercises.reduce((sum: number, item: TrainingExercise) => sum + item.customTime, 0);
     setTotalTime(total);
   }, [cartExercises]);
 
@@ -138,7 +79,6 @@ const Trainings: React.FC = () => {
     const existingItem = cartExercises.find(item => item.exerciseId === exercise.id);
    
     if (existingItem) {
-      // Si ya existe, aumentar tiempo en 5 minutos
       const updatedCart = cartExercises.map(item =>
         item.exerciseId === exercise.id
           ? { ...item, customTime: item.customTime + 5 }
@@ -146,7 +86,6 @@ const Trainings: React.FC = () => {
       );
       setCartExercises(updatedCart);
     } else {
-      // Si es nuevo, agregar con tiempo estimado original
       const newItem: TrainingExercise = {
         exerciseId: exercise.id,
         customTime: exercise.estimatedTime,
@@ -160,7 +99,6 @@ const Trainings: React.FC = () => {
   // Eliminar ejercicio del carrito
   const removeFromCart = (exerciseId: string) => {
     const updatedCart = cartExercises.filter(item => item.exerciseId !== exerciseId);
-    // Reordenar los ejercicios restantes
     const reorderedCart = updatedCart.map((item, index) => ({
       ...item,
       order: index + 1
@@ -254,74 +192,51 @@ const Trainings: React.FC = () => {
     setDraggedItem(null);
   };
 
-// Crear o actualizar entrenamiento EN SUPABASE
-const handleSaveTraining = async (e: React.FormEvent) => {
-  e.preventDefault();
- 
-  if (cartExercises.length === 0) {
-    alert('Agrega al menos un ejercicio al entrenamiento');
-    return;
-  }
-  if (!formData.name.trim()) {
-    alert('El nombre del entrenamiento es requerido');
-    return;
-  }
-
-  try {
-    // Extraer IDs de categorías únicos de los ejercicios en el carrito
-    const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item => 
-      item.exercise?.categoryId
-    ).filter(Boolean))) as string[];
-
-    console.log('Datos a guardar:', {
-      name: formData.name,
-      categories: uniqueCategoryIds,
-      exercises: cartExercises,
-      totalTime: totalTime,
-      observations: formData.observations,
-      createdBy: '1'
-    });
-
-    // Preparar datos para Supabase (sin campos auto-generados)
-    const trainingData = {
-      name: formData.name,
-      categories: uniqueCategoryIds,
-      exercises: cartExercises,
-      total_time: totalTime, // ← IMPORTANTE: usar snake_case para Supabase
-      observations: formData.observations,
-      created_by: '1' // ← IMPORTANTE: usar snake_case
-    };
-
-    if (editingTraining) {
-      console.log('Actualizando entrenamiento:', editingTraining.id);
-      // Actualizar entrenamiento existente EN SUPABASE
-      const updatedTraining = await updateTraining(editingTraining.id, trainingData);
-      console.log('Entrenamiento actualizado:', updatedTraining);
-
-      // Actualizar estado local
-      const updatedTrainings = trainings.map(t =>
-        t.id === editingTraining.id ? updatedTraining : t
-      );
-      setTrainings(updatedTrainings);
-     
-    } else {
-      console.log('Creando nuevo entrenamiento');
-      // Crear nuevo entrenamiento EN SUPABASE
-      const newTraining = await createTraining(trainingData);
-      console.log('Nuevo entrenamiento creado:', newTraining);
-
-      // Actualizar estado local
-      setTrainings([...trainings, newTraining]);
-    }
+  // Crear o actualizar entrenamiento
+  const handleSaveTraining = async (e: React.FormEvent) => {
+    e.preventDefault();
    
-    resetForm();
-    alert(editingTraining ? 'Entrenamiento actualizado correctamente' : 'Entrenamiento creado correctamente');
-    
-  } catch (error: any) {
-    console.error('Error detallado guardando entrenamiento:', error);
-    alert(`Error al guardar el entrenamiento: ${error.message}. Por favor, intenta nuevamente.`);
-  }
-};
+    if (cartExercises.length === 0) {
+      alert('Agrega al menos un ejercicio al entrenamiento');
+      return;
+    }
+    if (!formData.name.trim()) {
+      alert('El nombre del entrenamiento es requerido');
+      return;
+    }
+
+    try {
+      const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item => 
+        item.exercise?.categoryId
+      ).filter(Boolean))) as string[];
+
+      const trainingData = {
+        name: formData.name,
+        categories: uniqueCategoryIds,
+        exercises: cartExercises,
+        total_time: totalTime,
+        observations: formData.observations
+      };
+
+      if (editingTraining) {
+        const updatedTraining = await updateTraining(editingTraining.id, trainingData);
+        const updatedTrainings = trainings.map(t =>
+          t.id === editingTraining.id ? updatedTraining : t
+        );
+        setTrainings(updatedTrainings);
+      } else {
+        const newTraining = await createTraining(trainingData);
+        setTrainings([...trainings, newTraining]);
+      }
+     
+      resetForm();
+      alert(editingTraining ? 'Entrenamiento actualizado correctamente' : 'Entrenamiento creado correctamente');
+      
+    } catch (error: any) {
+      console.error('Error guardando entrenamiento:', error);
+      alert(`Error al guardar el entrenamiento: ${error.message}. Por favor, intenta nuevamente.`);
+    }
+  };
 
   // Copiar enlace compartible
   const copyShareLink = (shareId: string) => {
@@ -333,10 +248,9 @@ const handleSaveTraining = async (e: React.FormEvent) => {
     });
   };
 
-  // Descargar PDF del entrenamiento - VERSIÓN SIMPLIFICADA Y FUNCIONAL
+  // Descargar PDF del entrenamiento
   const downloadPDF = async (training: Training) => {
     try {
-      // Obtener información del usuario actual
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const currentDate = new Date().toLocaleDateString('es-ES', {
         year: 'numeric',
@@ -344,10 +258,9 @@ const handleSaveTraining = async (e: React.FormEvent) => {
         day: 'numeric'
       });
       
-      // Calcular distribución de tiempos por categoría
       const categoryTimes: {[key: string]: {name: string, time: number, color: string}} = {};
      
-      training.exercises.forEach(exerciseItem => {
+      training.exercises.forEach((exerciseItem: TrainingExercise) => {
         const exercise = exerciseItem.exercise;
         if (exercise && exercise.category) {
           const categoryId = exercise.category.id;
@@ -365,9 +278,7 @@ const handleSaveTraining = async (e: React.FormEvent) => {
       const categoryArray = Object.values(categoryTimes);
       const totalTime = training.totalTime;
       
-      // Mapeo de colores
       const getCategoryColor = (tailwindClass: string) => {
-        // Extraer solo la clase de color de fondo (primera parte antes del espacio)
         const baseColorClass = tailwindClass ? tailwindClass.split(' ')[0] : '';
      
         const colorMap: {[key: string]: {bg: string, text: string, border: string}} = {
@@ -384,72 +295,20 @@ const handleSaveTraining = async (e: React.FormEvent) => {
         return colorMap[baseColorClass] || { bg: '#e5e7eb', text: '#374151', border: '#9ca3af' };
       };
 
-      // Verificar si hay ejercicios sin categoría
-      const exercisesWithoutCategory = training.exercises.filter(item => !item.exercise?.category);
-      if (exercisesWithoutCategory.length > 0) {
-        console.warn(`${exercisesWithoutCategory.length} ejercicios sin categoría asignada`);
-      }
-
-      // Crear contenido HTML para el PDF
       const pdfHTML = `
         <!DOCTYPE html>
         <html>
           <head>
             <title>${training.name} - Sanse Complutense</title>
             <style>
-              body {
-                font-family: Arial, sans-serif;
-                margin: 0;
-                padding: 20px;
-                color: #1f2937;
-              }
-              .header {
-                background: linear-gradient(135deg, #D32F2F 0%, #B71C1C 100%);
-                color: white;
-                padding: 30px;
-                text-align: center;
-                border-radius: 10px;
-                margin-bottom: 20px;
-              }
-              .metrics {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px;
-                margin: 20px 0;
-              }
-              .metric-card {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 20px;
-                border-radius: 10px;
-                text-align: center;
-              }
-              .exercise-card {
-                border: 2px solid #e3f2fd;
-                border-radius: 10px;
-                padding: 15px;
-                margin: 10px 0;
-                background: white;
-              }
-              .distribution-bar {
-                display: flex;
-                height: 30px;
-                border-radius: 8px;
-                overflow: hidden;
-                background: #e2e8f0;
-                margin: 15px 0;
-              }
-              .footer {
-                background: #1e293b;
-                color: white;
-                padding: 20px;
-                text-align: center;
-                margin-top: 30px;
-                border-radius: 8px;
-              }
-              @media print {
-                body { margin: 0; }
-              }
+              body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #1f2937; }
+              .header { background: linear-gradient(135deg, #D32F2F 0%, #B71C1C 100%); color: white; padding: 30px; text-align: center; border-radius: 10px; margin-bottom: 20px; }
+              .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 20px 0; }
+              .metric-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center; }
+              .exercise-card { border: 2px solid #e3f2fd; border-radius: 10px; padding: 15px; margin: 10px 0; background: white; }
+              .distribution-bar { display: flex; height: 30px; border-radius: 8px; overflow: hidden; background: #e2e8f0; margin: 15px 0; }
+              .footer { background: #1e293b; color: white; padding: 20px; text-align: center; margin-top: 30px; border-radius: 8px; }
+              @media print { body { margin: 0; } }
             </style>
           </head>
           <body>
@@ -457,7 +316,6 @@ const handleSaveTraining = async (e: React.FormEvent) => {
               <h1 style="margin: 0 0 10px 0;">SANSE COMPLUTENSE</h1>
               <p style="margin: 0 0 20px 0; opacity: 0.9;">Club de Hockey Hierba</p>
               <h2 style="margin: 0 0 15px 0;">${training.name}</h2>
-             
               <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; text-align: left;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                   <span>Preparador físico:</span>
@@ -490,8 +348,7 @@ const handleSaveTraining = async (e: React.FormEvent) => {
               </div>
             </div>
             <h3 style="color: #1565C0; border-bottom: 2px solid #e3f2fd; padding-bottom: 10px;">💪 Ejercicios del Entrenamiento</h3>
-           
-            ${training.exercises.map((item, index) => {
+            ${training.exercises.map((item: TrainingExercise, index: number) => {
               const exercise = item.exercise;
               const category = exercise?.category;
               const colors = category ? getCategoryColor(category.color) : { bg: '#e5e7eb', text: '#374151', border: '#9ca3af' };
@@ -514,7 +371,7 @@ const handleSaveTraining = async (e: React.FormEvent) => {
                         ${category.name}
                       </span>
                     ` : `
-                      <span style="background: #e5e7eb; color: '#374151'; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid #9ca3af;">
+                      <span style="background: #e5e7eb; color: #374151; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid #9ca3af;">
                         Sin categoría
                       </span>
                     `}
@@ -524,9 +381,8 @@ const handleSaveTraining = async (e: React.FormEvent) => {
             }).join('')}
             <div style="background: #f8fafc; padding: 20px; border-radius: 10px; margin: 25px 0;">
               <h3 style="color: #1565C0; margin: 0 0 15px 0;">📊 Distribución de Tiempos por Categoría</h3>
-             
               <div class="distribution-bar">
-                ${categoryArray.map(category => {
+                ${categoryArray.map((category: any) => {
                   const percentage = (category.time / totalTime) * 100;
                   const colors = getCategoryColor(category.color);
                   return `<div style="width: ${percentage}%; background: ${colors.border};"></div>`;
@@ -537,10 +393,9 @@ const handleSaveTraining = async (e: React.FormEvent) => {
                   </div>
                 ` : ''}
               </div>
-             
               ${categoryArray.length > 0 ? `
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 15px;">
-                  ${categoryArray.map(category => {
+                  ${categoryArray.map((category: any) => {
                     const percentage = (category.time / totalTime) * 100;
                     const colors = getCategoryColor(category.color);
                     return `
@@ -566,14 +421,11 @@ const handleSaveTraining = async (e: React.FormEvent) => {
         </html>
       `;
 
-      // Abrir ventana para imprimir/guardar como PDF
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(pdfHTML);
         printWindow.document.close();
         printWindow.focus();
-       
-        // Esperar un momento y luego mostrar el diálogo de impresión
         setTimeout(() => {
           printWindow.print();
         }, 500);
@@ -584,18 +436,17 @@ const handleSaveTraining = async (e: React.FormEvent) => {
     }
   };
 
-  // Eliminar entrenamiento DE SUPABASE
+  // Eliminar entrenamiento
   const handleDeleteTraining = async (id: string, name: string) => {
     if (window.confirm(`¿Estás seguro de eliminar el entrenamiento "${name}"?`)) {
       try {
         await deleteTraining(id);
-        // Actualizar estado local
         const updatedTrainings = trainings.filter(t => t.id !== id);
         setTrainings(updatedTrainings);
         alert('Entrenamiento eliminado correctamente');
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error eliminando entrenamiento:', error);
-        alert('Error al eliminar el entrenamiento. Por favor, intenta nuevamente.');
+        alert(`Error al eliminar el entrenamiento: ${error.message}. Por favor, intenta nuevamente.`);
       }
     }
   };
@@ -626,19 +477,19 @@ const handleSaveTraining = async (e: React.FormEvent) => {
         </div>
         <div className="bg-white p-4 rounded-lg shadow-md text-center">
           <div className="text-2xl font-bold text-green-600">
-            {trainings.reduce((total, t) => total + t.exercises.length, 0)}
+            {trainings.reduce((total: number, t: Training) => total + t.exercises.length, 0)}
           </div>
           <div className="text-sm text-gray-600">Ejercicios Totales</div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-md text-center">
           <div className="text-2xl font-bold text-purple-600">
-            {trainings.reduce((total, t) => total + t.totalTime, 0)}
+            {trainings.reduce((total: number, t: Training) => total + t.totalTime, 0)}
           </div>
           <div className="text-sm text-gray-600">Minutos Totales</div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-md text-center">
           <div className="text-2xl font-bold text-orange-600">
-            {trainings.length > 0 ? Math.round(trainings.reduce((total, t) => total + t.totalTime, 0) / trainings.length) : 0}
+            {trainings.length > 0 ? Math.round(trainings.reduce((total: number, t: Training) => total + t.totalTime, 0) / trainings.length) : 0}
           </div>
           <div className="text-sm text-gray-600">Promedio Minutos</div>
         </div>
@@ -648,7 +499,6 @@ const handleSaveTraining = async (e: React.FormEvent) => {
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-5/6 overflow-hidden flex flex-col">
-            {/* Header del modal */}
             <div className="flex justify-between items-center p-6 border-b">
               <h2 className="text-2xl font-bold text-sanse-blue">
                 {editingTraining ? 'Editar Entrenamiento' : 'Crear Nuevo Entrenamiento'}
@@ -665,13 +515,12 @@ const handleSaveTraining = async (e: React.FormEvent) => {
               <div className="w-1/2 border-r p-6 overflow-y-auto">
                 <h3 className="text-xl font-semibold mb-4">Ejercicios Disponibles</h3>
                
-                {/* MODIFICACIÓN 3: Eliminar filtros por categoría del formulario */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     Categorías disponibles:
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {categories.map(category => (
+                    {categories.map((category: Category) => (
                       <span
                         key={category.id}
                         className={`px-3 py-2 rounded-full text-sm font-medium ${category.color}`}
@@ -685,9 +534,8 @@ const handleSaveTraining = async (e: React.FormEvent) => {
                   </p>
                 </div>
 
-                {/* Lista de ejercicios filtrados */}
                 <div className="space-y-3">
-                  {exercises.map(exercise => (
+                  {exercises.map((exercise: Exercise) => (
                     <div key={exercise.id} className="bg-gray-50 p-4 rounded-lg border hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
@@ -758,7 +606,7 @@ const handleSaveTraining = async (e: React.FormEvent) => {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {cartExercises.map((item, index) => (
+                        {cartExercises.map((item: TrainingExercise, index: number) => (
                           <div
                             key={item.exerciseId}
                             className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-move ${
@@ -801,7 +649,6 @@ const handleSaveTraining = async (e: React.FormEvent) => {
                               </div>
                              
                               <div className="flex flex-col gap-1 ml-2">
-                                {/* Botones para mover */}
                                 <div className="flex gap-1">
                                   <button
                                     onClick={() => moveExerciseUp(index)}
@@ -890,7 +737,7 @@ const handleSaveTraining = async (e: React.FormEvent) => {
           </div>
         ) : (
           <div className="grid gap-6">
-            {trainings.map(training => (
+            {trainings.map((training: Training) => (
               <div key={training.id} className="bg-white p-6 rounded-lg shadow-md border hover:shadow-lg transition-shadow">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
@@ -919,7 +766,7 @@ const handleSaveTraining = async (e: React.FormEvent) => {
 
                     {/* Categorías del entrenamiento */}
                     <div className="flex flex-wrap gap-2 mb-3">
-                      {training.categories.map(catId => {
+                      {training.categories.map((catId: string) => {
                         const category = categories.find(c => c.id === catId);
                         return category ? (
                           <span key={catId} className={`px-2 py-1 rounded-full text-xs ${category.color}`}>
@@ -931,7 +778,7 @@ const handleSaveTraining = async (e: React.FormEvent) => {
 
                     {/* Ejercicios del entrenamiento */}
                     <div className="space-y-2">
-                      {training.exercises.map((te, index) => (
+                      {training.exercises.map((te: TrainingExercise, index: number) => (
                         <div key={index} className="flex items-center gap-3 text-sm bg-gray-50 p-2 rounded">
                           <span className="text-gray-500 w-6 text-center">{index + 1}.</span>
                           <span className="flex-1">{te.exercise?.name}</span>

@@ -1,8 +1,23 @@
 import { supabase } from './supabase';
 import { Training, Exercise, Category, TrainingExercise } from '../types/training';
 
+// Función helper para obtener el usuario actual
+const getCurrentUser = async () => {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error) {
+    console.error('Error getting user:', error);
+    throw new Error('Usuario no autenticado');
+  }
+  if (!user) {
+    throw new Error('Usuario no autenticado');
+  }
+  return user;
+};
+
 export const getTrainings = async (): Promise<Training[]> => {
   try {
+    const user = await getCurrentUser();
+    
     const { data, error } = await supabase
       .from('trainings')
       .select(`
@@ -15,6 +30,7 @@ export const getTrainings = async (): Promise<Training[]> => {
           )
         )
       `)
+      .eq('created_by', user.id) // Solo los entrenamientos del usuario actual
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -25,7 +41,6 @@ export const getTrainings = async (): Promise<Training[]> => {
     if (!data) return [];
 
     return data.map(training => {
-      // Convertir training_exercises a nuestro formato TrainingExercise
       const exercises: TrainingExercise[] = (training.training_exercises || []).map((te: any) => ({
         exerciseId: te.exercise_id,
         customTime: te.custom_time,
@@ -44,7 +59,6 @@ export const getTrainings = async (): Promise<Training[]> => {
         } : undefined
       }));
 
-      // Ordenar ejercicios por order
       exercises.sort((a, b) => a.order - b.order);
 
       return {
@@ -62,7 +76,7 @@ export const getTrainings = async (): Promise<Training[]> => {
     });
   } catch (error) {
     console.error('Error in getTrainings:', error);
-    return [];
+    throw error;
   }
 };
 
@@ -125,8 +139,10 @@ export const getCategories = async (): Promise<Category[]> => {
 
 export const createTraining = async (trainingData: any): Promise<Training> => {
   try {
-    console.log('Creating training with data:', trainingData);
+    const user = await getCurrentUser();
     
+    console.log('Creating training for user:', user.id);
+
     // 1. Crear el entrenamiento principal
     const { data: training, error: trainingError } = await supabase
       .from('trainings')
@@ -136,7 +152,8 @@ export const createTraining = async (trainingData: any): Promise<Training> => {
           categories: trainingData.categories,
           observations: trainingData.observations,
           total_time: trainingData.total_time,
-          created_by: trainingData.created_by
+          created_by: user.id, // UUID real del usuario
+          updated_at: new Date().toISOString()
         }
       ])
       .select()
@@ -193,9 +210,27 @@ export const createTraining = async (trainingData: any): Promise<Training> => {
 
 export const updateTraining = async (id: string, trainingData: any): Promise<Training> => {
   try {
-    console.log('Updating training:', id, 'with data:', trainingData);
+    const user = await getCurrentUser();
     
-    // 1. Actualizar el entrenamiento principal
+    console.log('Updating training:', id, 'for user:', user.id);
+
+    // 1. Verificar que el training pertenece al usuario actual
+    const { data: existingTraining, error: fetchError } = await supabase
+      .from('trainings')
+      .select('created_by')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching training:', fetchError);
+      throw fetchError;
+    }
+
+    if (existingTraining.created_by !== user.id) {
+      throw new Error('No tienes permisos para editar este entrenamiento');
+    }
+
+    // 2. Actualizar el entrenamiento principal
     const { data: training, error: trainingError } = await supabase
       .from('trainings')
       .update({
@@ -218,7 +253,7 @@ export const updateTraining = async (id: string, trainingData: any): Promise<Tra
       throw new Error('No data returned from Supabase for training');
     }
 
-    // 2. Eliminar training_exercises existentes
+    // 3. Eliminar training_exercises existentes
     const { error: deleteError } = await supabase
       .from('training_exercises')
       .delete()
@@ -229,7 +264,7 @@ export const updateTraining = async (id: string, trainingData: any): Promise<Tra
       throw deleteError;
     }
 
-    // 3. Crear nuevos training_exercises
+    // 4. Crear nuevos training_exercises
     if (trainingData.exercises && trainingData.exercises.length > 0) {
       const trainingExercises = trainingData.exercises.map((exercise: TrainingExercise, index: number) => ({
         training_id: id,
@@ -270,9 +305,25 @@ export const updateTraining = async (id: string, trainingData: any): Promise<Tra
 
 export const deleteTraining = async (id: string): Promise<void> => {
   try {
-    console.log('Deleting training:', id);
-    
-    // 1. Primero eliminar training_exercises (por la foreign key)
+    const user = await getCurrentUser();
+
+    // 1. Verificar que el training pertenece al usuario actual
+    const { data: existingTraining, error: fetchError } = await supabase
+      .from('trainings')
+      .select('created_by')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching training:', fetchError);
+      throw fetchError;
+    }
+
+    if (existingTraining.created_by !== user.id) {
+      throw new Error('No tienes permisos para eliminar este entrenamiento');
+    }
+
+    // 2. Primero eliminar training_exercises
     const { error: exercisesError } = await supabase
       .from('training_exercises')
       .delete()
@@ -283,7 +334,7 @@ export const deleteTraining = async (id: string): Promise<void> => {
       throw exercisesError;
     }
 
-    // 2. Luego eliminar el training
+    // 3. Luego eliminar el training
     const { error: trainingError } = await supabase
       .from('trainings')
       .delete()
