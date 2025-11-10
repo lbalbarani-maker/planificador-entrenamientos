@@ -239,8 +239,9 @@ const Trainings: React.FC = () => {
   // Descargar PDF del entrenamiento
   const downloadPDF = async (training: Training) => {
     try {
-      // Obtener usuario desde Supabase Auth en lugar de localStorage
-      const { data: { user } } = await import('../lib/supabase').then(mod => mod.supabase.auth.getUser());
+      // Obtener usuario desde localStorage (sistema original)
+const userData = localStorage.getItem('user');
+const user = userData ? JSON.parse(userData) : {};
       
       const currentDate = new Date().toLocaleDateString('es-ES', {
         year: 'numeric',
@@ -309,7 +310,7 @@ const Trainings: React.FC = () => {
               <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; text-align: left;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                   <span>Preparador físico:</span>
-                  <span style="font-weight: bold;">${user?.user_metadata?.full_name || 'Usuario'}</span>
+                  <span style="font-weight: bold;">${user?.fullName || 'Usuario'}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                   <span>Fecha:</span>

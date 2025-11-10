@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { usersApi } from '../lib/supabaseUsers';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -13,17 +13,22 @@ const Login: React.FC = () => {
     setError('');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        setError(error.message);
-      } else if (data.user) {
-        // El redireccionamiento lo maneja automáticamente App.tsx
-        // a través del onAuthStateChange
-        console.log('Login exitoso');
+      // Buscar usuario en tu tabla custom de users
+      const user = await usersApi.loginUser(email, password);
+      
+      if (user) {
+        // Login exitoso - guardar sesión en localStorage como antes
+        localStorage.setItem('user', JSON.stringify({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          fullName: user.full_name
+        }));
+        
+        // Recargar para que App.tsx detecte el cambio
+        window.location.href = '/';
+      } else {
+        setError('Credenciales incorrectas o usuario inactivo');
       }
     } catch (error) {
       console.error('Error en login:', error);
@@ -36,6 +41,7 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-md w-96">
+        
         {/* Logo real */}
         <div className="flex justify-center mb-6">
           <div className="flex flex-col items-center">
@@ -52,11 +58,13 @@ const Login: React.FC = () => {
             </p>
           </div>
         </div>
+
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
           </div>
         )}
+
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
@@ -72,6 +80,7 @@ const Login: React.FC = () => {
               placeholder="tu@email.com"
             />
           </div>
+
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2">
               Contraseña
@@ -86,6 +95,7 @@ const Login: React.FC = () => {
               placeholder="••••••••"
             />
           </div>
+
           <button
             type="submit"
             disabled={loading}
@@ -94,6 +104,7 @@ const Login: React.FC = () => {
             {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
           </button>
         </form>
+
       </div>
     </div>
   );
