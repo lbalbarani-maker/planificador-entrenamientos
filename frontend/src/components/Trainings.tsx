@@ -290,7 +290,7 @@ const user = userData ? JSON.parse(userData) : {};
         <!DOCTYPE html>
         <html>
           <head>
-            <title>${training.name} - Sanse Complutense</title>
+            
             <style>
               body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #1f2937; }
               .header { background: linear-gradient(135deg, #D32F2F 0%, #B71C1C 100%); color: white; padding: 30px; text-align: center; border-radius: 10px; margin-bottom: 20px; }
@@ -305,7 +305,7 @@ const user = userData ? JSON.parse(userData) : {};
           <body>
             <div class="header">
               <h1 style="margin: 0 0 10px 0;">SANSE COMPLUTENSE</h1>
-              <p style="margin: 0 0 20px 0; opacity: 0.9;">Club de Hockey Hierba</p>
+              <p style="margin: 0 0 20px 0; opacity: 0.9;">Club de Hockey</p>
               <h2 style="margin: 0 0 15px 0;">${training.name}</h2>
               <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; text-align: left;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
@@ -405,8 +405,8 @@ const user = userData ? JSON.parse(userData) : {};
               `}
             </div>
             <div class="footer">
-              <p style="margin: 0; opacity: 0.8;">Generado automáticamente por el Planificador de Entrenamientos Sanse Complutense</p>
-              <p style="margin: 5px 0 0 0; opacity: 0.8;">${window.location.origin}</p>
+            
+            
             </div>
           </body>
         </html>
