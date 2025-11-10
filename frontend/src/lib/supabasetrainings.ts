@@ -1,11 +1,20 @@
 import { supabase } from './supabase';
-import { Training, Exercise, Category } from '../types/training';
+import { Training, Exercise, Category, TrainingExercise } from '../types/training';
 
 export const getTrainings = async (): Promise<Training[]> => {
   try {
     const { data, error } = await supabase
       .from('trainings')
-      .select('*')
+      .select(`
+        *,
+        training_exercises (
+          *,
+          exercises (
+            *,
+            categories (*)
+          )
+        )
+      `)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -15,18 +24,42 @@ export const getTrainings = async (): Promise<Training[]> => {
 
     if (!data) return [];
 
-    return data.map(training => ({
-      id: training.id,
-      name: training.name,
-      categories: training.categories || [],
-      exercises: training.exercises || [],
-      totalTime: training.total_time || 0,
-      observations: training.observations || '',
-      createdBy: training.created_by || '',
-      createdAt: training.created_at,
-      updatedAt: training.updated_at,
-      shareId: training.share_id || ''
-    }));
+    return data.map(training => {
+      // Convertir training_exercises a nuestro formato TrainingExercise
+      const exercises: TrainingExercise[] = (training.training_exercises || []).map((te: any) => ({
+        exerciseId: te.exercise_id,
+        customTime: te.custom_time,
+        order: te.exercise_order,
+        exercise: te.exercises ? {
+          id: te.exercises.id,
+          name: te.exercises.name,
+          description: te.exercises.description || '',
+          estimatedTime: te.exercises.estimated_time || 0,
+          categoryId: te.exercises.category_id,
+          category: te.exercises.categories ? {
+            id: te.exercises.categories.id,
+            name: te.exercises.categories.name,
+            color: te.exercises.categories.color || 'bg-gray-100 text-gray-800'
+          } : undefined
+        } : undefined
+      }));
+
+      // Ordenar ejercicios por order
+      exercises.sort((a, b) => a.order - b.order);
+
+      return {
+        id: training.id,
+        name: training.name,
+        categories: training.categories || [],
+        exercises: exercises,
+        totalTime: training.total_time || 0,
+        observations: training.observations || '',
+        createdBy: training.created_by || '',
+        createdAt: training.created_at,
+        updatedAt: training.updated_at,
+        shareId: training.share_id || ''
+      };
+    });
   } catch (error) {
     console.error('Error in getTrainings:', error);
     return [];
@@ -94,43 +127,63 @@ export const createTraining = async (trainingData: any): Promise<Training> => {
   try {
     console.log('Creating training with data:', trainingData);
     
-    const { data, error } = await supabase
+    // 1. Crear el entrenamiento principal
+    const { data: training, error: trainingError } = await supabase
       .from('trainings')
       .insert([
         {
           name: trainingData.name,
           categories: trainingData.categories,
-          exercises: trainingData.exercises,
-          total_time: trainingData.total_time,
           observations: trainingData.observations,
+          total_time: trainingData.total_time,
           created_by: trainingData.created_by
         }
       ])
       .select()
       .single();
 
-    if (error) {
-      console.error('Supabase error creating training:', error);
-      throw error;
+    if (trainingError) {
+      console.error('Supabase error creating training:', trainingError);
+      throw trainingError;
     }
 
-    if (!data) {
-      throw new Error('No data returned from Supabase');
+    if (!training) {
+      throw new Error('No data returned from Supabase for training');
     }
 
-    console.log('Training created successfully:', data);
+    // 2. Crear los training_exercises
+    if (trainingData.exercises && trainingData.exercises.length > 0) {
+      const trainingExercises = trainingData.exercises.map((exercise: TrainingExercise, index: number) => ({
+        training_id: training.id,
+        exercise_id: exercise.exerciseId,
+        custom_time: exercise.customTime,
+        exercise_order: exercise.order || index + 1
+      }));
 
+      const { error: exercisesError } = await supabase
+        .from('training_exercises')
+        .insert(trainingExercises);
+
+      if (exercisesError) {
+        console.error('Supabase error creating training exercises:', exercisesError);
+        throw exercisesError;
+      }
+    }
+
+    console.log('Training created successfully:', training);
+
+    // 3. Retornar el training completo con ejercicios
     return {
-      id: data.id,
-      name: data.name,
-      categories: data.categories || [],
-      exercises: data.exercises || [],
-      totalTime: data.total_time || 0,
-      observations: data.observations || '',
-      createdBy: data.created_by || '',
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      shareId: data.share_id || ''
+      id: training.id,
+      name: training.name,
+      categories: training.categories || [],
+      exercises: trainingData.exercises || [],
+      totalTime: training.total_time || 0,
+      observations: training.observations || '',
+      createdBy: training.created_by || '',
+      createdAt: training.created_at,
+      updatedAt: training.updated_at,
+      shareId: training.share_id || ''
     };
   } catch (error) {
     console.error('Error in createTraining:', error);
@@ -142,42 +195,72 @@ export const updateTraining = async (id: string, trainingData: any): Promise<Tra
   try {
     console.log('Updating training:', id, 'with data:', trainingData);
     
-    const { data, error } = await supabase
+    // 1. Actualizar el entrenamiento principal
+    const { data: training, error: trainingError } = await supabase
       .from('trainings')
       .update({
         name: trainingData.name,
         categories: trainingData.categories,
-        exercises: trainingData.exercises,
-        total_time: trainingData.total_time,
         observations: trainingData.observations,
+        total_time: trainingData.total_time,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
       .select()
       .single();
 
-    if (error) {
-      console.error('Supabase error updating training:', error);
-      throw error;
+    if (trainingError) {
+      console.error('Supabase error updating training:', trainingError);
+      throw trainingError;
     }
 
-    if (!data) {
-      throw new Error('No data returned from Supabase');
+    if (!training) {
+      throw new Error('No data returned from Supabase for training');
     }
 
-    console.log('Training updated successfully:', data);
+    // 2. Eliminar training_exercises existentes
+    const { error: deleteError } = await supabase
+      .from('training_exercises')
+      .delete()
+      .eq('training_id', id);
+
+    if (deleteError) {
+      console.error('Supabase error deleting training exercises:', deleteError);
+      throw deleteError;
+    }
+
+    // 3. Crear nuevos training_exercises
+    if (trainingData.exercises && trainingData.exercises.length > 0) {
+      const trainingExercises = trainingData.exercises.map((exercise: TrainingExercise, index: number) => ({
+        training_id: id,
+        exercise_id: exercise.exerciseId,
+        custom_time: exercise.customTime,
+        exercise_order: exercise.order || index + 1
+      }));
+
+      const { error: exercisesError } = await supabase
+        .from('training_exercises')
+        .insert(trainingExercises);
+
+      if (exercisesError) {
+        console.error('Supabase error creating training exercises:', exercisesError);
+        throw exercisesError;
+      }
+    }
+
+    console.log('Training updated successfully:', training);
 
     return {
-      id: data.id,
-      name: data.name,
-      categories: data.categories || [],
-      exercises: data.exercises || [],
-      totalTime: data.total_time || 0,
-      observations: data.observations || '',
-      createdBy: data.created_by || '',
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      shareId: data.share_id || ''
+      id: training.id,
+      name: training.name,
+      categories: training.categories || [],
+      exercises: trainingData.exercises || [],
+      totalTime: training.total_time || 0,
+      observations: training.observations || '',
+      createdBy: training.created_by || '',
+      createdAt: training.created_at,
+      updatedAt: training.updated_at,
+      shareId: training.share_id || ''
     };
   } catch (error) {
     console.error('Error in updateTraining:', error);
@@ -189,14 +272,26 @@ export const deleteTraining = async (id: string): Promise<void> => {
   try {
     console.log('Deleting training:', id);
     
-    const { error } = await supabase
+    // 1. Primero eliminar training_exercises (por la foreign key)
+    const { error: exercisesError } = await supabase
+      .from('training_exercises')
+      .delete()
+      .eq('training_id', id);
+
+    if (exercisesError) {
+      console.error('Supabase error deleting training exercises:', exercisesError);
+      throw exercisesError;
+    }
+
+    // 2. Luego eliminar el training
+    const { error: trainingError } = await supabase
       .from('trainings')
       .delete()
       .eq('id', id);
 
-    if (error) {
-      console.error('Supabase error deleting training:', error);
-      throw error;
+    if (trainingError) {
+      console.error('Supabase error deleting training:', trainingError);
+      throw trainingError;
     }
 
     console.log('Training deleted successfully');

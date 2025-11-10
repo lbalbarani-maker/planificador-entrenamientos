@@ -104,12 +104,7 @@ const Login: React.FC = () => {
           </button>
         </form>
 
-        {/* Información de prueba */}
-        <div className="mt-6 p-4 bg-blue-50 rounded-md text-sm text-blue-700">
-          <p className="font-semibold">Usuarios de prueba:</p>
-          <p>Admin: admin@sanse.com / admin123</p>
-          <p className="text-xs mt-2">* Los usuarios se guardan en Supabase</p>
-        </div>
+        
       </div>
     </div>
   );
