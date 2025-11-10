@@ -254,61 +254,74 @@ const Trainings: React.FC = () => {
     setDraggedItem(null);
   };
 
-  // Crear o actualizar entrenamiento EN SUPABASE
-  const handleSaveTraining = async (e: React.FormEvent) => {
-    e.preventDefault();
-   
-    if (cartExercises.length === 0) {
-      alert('Agrega al menos un ejercicio al entrenamiento');
-      return;
-    }
-    if (!formData.name.trim()) {
-      alert('El nombre del entrenamiento es requerido');
-      return;
-    }
+// Crear o actualizar entrenamiento EN SUPABASE
+const handleSaveTraining = async (e: React.FormEvent) => {
+  e.preventDefault();
+ 
+  if (cartExercises.length === 0) {
+    alert('Agrega al menos un ejercicio al entrenamiento');
+    return;
+  }
+  if (!formData.name.trim()) {
+    alert('El nombre del entrenamiento es requerido');
+    return;
+  }
 
-    try {
-      // Extraer IDs de categorías únicos de los ejercicios en el carrito
-      const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item => 
-        item.exercise?.categoryId
-      ).filter(Boolean))) as string[];
+  try {
+    // Extraer IDs de categorías únicos de los ejercicios en el carrito
+    const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item => 
+      item.exercise?.categoryId
+    ).filter(Boolean))) as string[];
 
-      // Preparar datos para Supabase (sin campos auto-generados)
-      const trainingData = {
-        name: formData.name,
-        categories: uniqueCategoryIds,
-        exercises: cartExercises,
-        totalTime: totalTime,
-        observations: formData.observations,
-        createdBy: '1' // Esto debería venir del usuario autenticado
-      };
+    console.log('Datos a guardar:', {
+      name: formData.name,
+      categories: uniqueCategoryIds,
+      exercises: cartExercises,
+      totalTime: totalTime,
+      observations: formData.observations,
+      createdBy: '1'
+    });
 
-      if (editingTraining) {
-        // Actualizar entrenamiento existente EN SUPABASE
-        const updatedTraining = await updateTraining(editingTraining.id, trainingData);
+    // Preparar datos para Supabase (sin campos auto-generados)
+    const trainingData = {
+      name: formData.name,
+      categories: uniqueCategoryIds,
+      exercises: cartExercises,
+      total_time: totalTime, // ← IMPORTANTE: usar snake_case para Supabase
+      observations: formData.observations,
+      created_by: '1' // ← IMPORTANTE: usar snake_case
+    };
 
-        // Actualizar estado local
-        const updatedTrainings = trainings.map(t =>
-          t.id === editingTraining.id ? updatedTraining : t
-        );
-        setTrainings(updatedTrainings);
-       
-      } else {
-        // Crear nuevo entrenamiento EN SUPABASE
-        const newTraining = await createTraining(trainingData);
+    if (editingTraining) {
+      console.log('Actualizando entrenamiento:', editingTraining.id);
+      // Actualizar entrenamiento existente EN SUPABASE
+      const updatedTraining = await updateTraining(editingTraining.id, trainingData);
+      console.log('Entrenamiento actualizado:', updatedTraining);
 
-        // Actualizar estado local
-        setTrainings([...trainings, newTraining]);
-      }
+      // Actualizar estado local
+      const updatedTrainings = trainings.map(t =>
+        t.id === editingTraining.id ? updatedTraining : t
+      );
+      setTrainings(updatedTrainings);
      
-      resetForm();
-      alert(editingTraining ? 'Entrenamiento actualizado correctamente' : 'Entrenamiento creado correctamente');
-      
-    } catch (error) {
-      console.error('Error guardando entrenamiento:', error);
-      alert('Error al guardar el entrenamiento. Por favor, intenta nuevamente.');
+    } else {
+      console.log('Creando nuevo entrenamiento');
+      // Crear nuevo entrenamiento EN SUPABASE
+      const newTraining = await createTraining(trainingData);
+      console.log('Nuevo entrenamiento creado:', newTraining);
+
+      // Actualizar estado local
+      setTrainings([...trainings, newTraining]);
     }
-  };
+   
+    resetForm();
+    alert(editingTraining ? 'Entrenamiento actualizado correctamente' : 'Entrenamiento creado correctamente');
+    
+  } catch (error: any) {
+    console.error('Error detallado guardando entrenamiento:', error);
+    alert(`Error al guardar el entrenamiento: ${error.message}. Por favor, intenta nuevamente.`);
+  }
+};
 
   // Copiar enlace compartible
   const copyShareLink = (shareId: string) => {

@@ -1,229 +1,207 @@
 import { supabase } from './supabase';
 import { Training, Exercise, Category } from '../types/training';
 
-// Obtener todos los entrenamientos del usuario actual
 export const getTrainings = async (): Promise<Training[]> => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Usuario no autenticado');
+  try {
+    const { data, error } = await supabase
+      .from('trainings')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  const { data, error } = await supabase
-    .from('trainings')
-    .select('*')
-    .eq('created_by', user.id)
-    .order('updated_at', { ascending: false });
+    if (error) {
+      console.error('Error fetching trainings:', error);
+      throw error;
+    }
 
-  if (error) throw error;
-  
-  // Convertir de snake_case a camelCase
-  return data.map(training => ({
-    id: training.id,
-    name: training.name,
-    categories: training.categories || [],
-    exercises: (training.exercises || []).map((ex: any) => ({
-      exerciseId: ex.exercise_id,
-      customTime: ex.custom_time,
-      order: ex.order,
-      exercise: ex.exercise
-    })),
-    totalTime: training.total_time,
-    observations: training.observations,
-    createdBy: training.created_by,
-    createdAt: training.created_at,
-    updatedAt: training.updated_at,
-    shareId: training.share_id
-  }));
-};
+    if (!data) return [];
 
-// Obtener todos los ejercicios
-export const getExercises = async (): Promise<Exercise[]> => {
-  const { data, error } = await supabase
-    .from('exercises')
-    .select(`
-      *,
-      category:categories(*)
-    `)
-    .order('name');
-
-  if (error) throw error;
-  
-  // Convertir de snake_case a camelCase
-  return data.map(exercise => ({
-    id: exercise.id,
-    name: exercise.name,
-    description: exercise.description,
-    estimatedTime: exercise.estimated_time,
-    categoryId: exercise.category_id,
-    createdBy: exercise.created_by,
-    createdAt: exercise.created_at,
-    category: exercise.category ? {
-      id: exercise.category.id,
-      name: exercise.category.name,
-      color: exercise.category.color,
-      createdAt: exercise.category.created_at
-    } : undefined
-  }));
-};
-
-// Obtener todas las categorías
-export const getCategories = async (): Promise<Category[]> => {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .order('name');
-
-  if (error) throw error;
-  
-  // Convertir de snake_case a camelCase
-  return data.map(category => ({
-    id: category.id,
-    name: category.name,
-    color: category.color,
-    createdAt: category.created_at
-  }));
-};
-
-// Crear nuevo entrenamiento
-export const createTraining = async (training: Omit<Training, 'id' | 'createdAt' | 'updatedAt' | 'shareId'>): Promise<Training> => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Usuario no autenticado');
-
-  const shareId = Math.random().toString(36).substring(2, 10).toUpperCase();
-  
-  // Convertir de camelCase a snake_case para la base de datos
-  const { data, error } = await supabase
-    .from('trainings')
-    .insert([
-      {
-        name: training.name,
-        categories: training.categories,
-        exercises: training.exercises.map(ex => ({
-          exercise_id: ex.exerciseId,
-          custom_time: ex.customTime,
-          order: ex.order,
-          exercise: ex.exercise
-        })),
-        total_time: training.totalTime,
-        observations: training.observations,
-        created_by: user.id,
-        share_id: shareId
-      }
-    ])
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // Convertir de snake_case a camelCase para la respuesta
-  return {
-    id: data.id,
-    name: data.name,
-    categories: data.categories || [],
-    exercises: (data.exercises || []).map((ex: any) => ({
-      exerciseId: ex.exercise_id,
-      customTime: ex.custom_time,
-      order: ex.order,
-      exercise: ex.exercise
-    })),
-    totalTime: data.total_time,
-    observations: data.observations,
-    createdBy: data.created_by,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-    shareId: data.share_id
-  };
-};
-
-// Actualizar entrenamiento existente
-export const updateTraining = async (id: string, training: Partial<Training>): Promise<Training> => {
-  // Convertir de camelCase a snake_case para la base de datos
-  const updateData: any = {
-    name: training.name,
-    categories: training.categories,
-    observations: training.observations,
-    updated_at: new Date().toISOString()
-  };
-
-  if (training.exercises) {
-    updateData.exercises = training.exercises.map(ex => ({
-      exercise_id: ex.exerciseId,
-      custom_time: ex.customTime,
-      order: ex.order,
-      exercise: ex.exercise
+    return data.map(training => ({
+      id: training.id,
+      name: training.name,
+      categories: training.categories || [],
+      exercises: training.exercises || [],
+      totalTime: training.total_time || 0,
+      observations: training.observations || '',
+      createdBy: training.created_by || '',
+      createdAt: training.created_at,
+      updatedAt: training.updated_at,
+      shareId: training.share_id || ''
     }));
+  } catch (error) {
+    console.error('Error in getTrainings:', error);
+    return [];
   }
-
-  if (training.totalTime !== undefined) {
-    updateData.total_time = training.totalTime;
-  }
-
-  const { data, error } = await supabase
-    .from('trainings')
-    .update(updateData)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // Convertir de snake_case a camelCase para la respuesta
-  return {
-    id: data.id,
-    name: data.name,
-    categories: data.categories || [],
-    exercises: (data.exercises || []).map((ex: any) => ({
-      exerciseId: ex.exercise_id,
-      customTime: ex.custom_time,
-      order: ex.order,
-      exercise: ex.exercise
-    })),
-    totalTime: data.total_time,
-    observations: data.observations,
-    createdBy: data.created_by,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-    shareId: data.share_id
-  };
 };
 
-// Eliminar entrenamiento
+export const getExercises = async (): Promise<Exercise[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('exercises')
+      .select('*, categories(*)')
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching exercises:', error);
+      throw error;
+    }
+
+    if (!data) return [];
+
+    return data.map(exercise => ({
+      id: exercise.id,
+      name: exercise.name,
+      description: exercise.description || '',
+      estimatedTime: exercise.estimated_time || 0,
+      categoryId: exercise.category_id,
+      category: exercise.categories ? {
+        id: exercise.categories.id,
+        name: exercise.categories.name,
+        color: exercise.categories.color || 'bg-gray-100 text-gray-800'
+      } : undefined
+    }));
+  } catch (error) {
+    console.error('Error in getExercises:', error);
+    return [];
+  }
+};
+
+export const getCategories = async (): Promise<Category[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching categories:', error);
+      throw error;
+    }
+
+    if (!data) return [];
+
+    return data.map(category => ({
+      id: category.id,
+      name: category.name,
+      color: category.color || 'bg-gray-100 text-gray-800'
+    }));
+  } catch (error) {
+    console.error('Error in getCategories:', error);
+    return [];
+  }
+};
+
+export const createTraining = async (trainingData: any): Promise<Training> => {
+  try {
+    console.log('Creating training with data:', trainingData);
+    
+    const { data, error } = await supabase
+      .from('trainings')
+      .insert([
+        {
+          name: trainingData.name,
+          categories: trainingData.categories,
+          exercises: trainingData.exercises,
+          total_time: trainingData.total_time,
+          observations: trainingData.observations,
+          created_by: trainingData.created_by
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase error creating training:', error);
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error('No data returned from Supabase');
+    }
+
+    console.log('Training created successfully:', data);
+
+    return {
+      id: data.id,
+      name: data.name,
+      categories: data.categories || [],
+      exercises: data.exercises || [],
+      totalTime: data.total_time || 0,
+      observations: data.observations || '',
+      createdBy: data.created_by || '',
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      shareId: data.share_id || ''
+    };
+  } catch (error) {
+    console.error('Error in createTraining:', error);
+    throw error;
+  }
+};
+
+export const updateTraining = async (id: string, trainingData: any): Promise<Training> => {
+  try {
+    console.log('Updating training:', id, 'with data:', trainingData);
+    
+    const { data, error } = await supabase
+      .from('trainings')
+      .update({
+        name: trainingData.name,
+        categories: trainingData.categories,
+        exercises: trainingData.exercises,
+        total_time: trainingData.total_time,
+        observations: trainingData.observations,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase error updating training:', error);
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error('No data returned from Supabase');
+    }
+
+    console.log('Training updated successfully:', data);
+
+    return {
+      id: data.id,
+      name: data.name,
+      categories: data.categories || [],
+      exercises: data.exercises || [],
+      totalTime: data.total_time || 0,
+      observations: data.observations || '',
+      createdBy: data.created_by || '',
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      shareId: data.share_id || ''
+    };
+  } catch (error) {
+    console.error('Error in updateTraining:', error);
+    throw error;
+  }
+};
+
 export const deleteTraining = async (id: string): Promise<void> => {
-  const { error } = await supabase
-    .from('trainings')
-    .delete()
-    .eq('id', id);
+  try {
+    console.log('Deleting training:', id);
+    
+    const { error } = await supabase
+      .from('trainings')
+      .delete()
+      .eq('id', id);
 
-  if (error) throw error;
-};
+    if (error) {
+      console.error('Supabase error deleting training:', error);
+      throw error;
+    }
 
-// Obtener entrenamiento por share_id (para compartir)
-export const getTrainingByShareId = async (shareId: string): Promise<Training> => {
-  const { data, error } = await supabase
-    .from('trainings')
-    .select(`
-      *,
-      user:profiles(full_name)
-    `)
-    .eq('share_id', shareId)
-    .single();
-
-  if (error) throw error;
-
-  // Convertir de snake_case a camelCase para la respuesta
-  return {
-    id: data.id,
-    name: data.name,
-    categories: data.categories || [],
-    exercises: (data.exercises || []).map((ex: any) => ({
-      exerciseId: ex.exercise_id,
-      customTime: ex.custom_time,
-      order: ex.order,
-      exercise: ex.exercise
-    })),
-    totalTime: data.total_time,
-    observations: data.observations,
-    createdBy: data.user?.full_name || 'Usuario',
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-    shareId: data.share_id
-  };
+    console.log('Training deleted successfully');
+  } catch (error) {
+    console.error('Error in deleteTraining:', error);
+    throw error;
+  }
 };
