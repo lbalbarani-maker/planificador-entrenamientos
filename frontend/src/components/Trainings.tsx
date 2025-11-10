@@ -287,9 +287,8 @@ const user = userData ? JSON.parse(userData) : {};
       };
 
       const pdfHTML = `
-        <!DOCTYPE html>
-        <html>
-          <head>
+              
+          
             
             <style>
               body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #1f2937; }
@@ -399,17 +398,13 @@ const user = userData ? JSON.parse(userData) : {};
                   }).join('')}
                 </div>
               ` : `
-                <div style="text-align: center; color: #6b7280; margin-top: 15px;">
-                  No hay datos de categorías disponibles
-                </div>
+            
+            
+            
               `}
-            </div>
-            <div class="footer">
-            
-            
-            </div>
-          </body>
-        </html>
+        
+          
+        
       `;
 
       const printWindow = window.open('', '_blank');
