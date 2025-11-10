@@ -36,17 +36,21 @@ export interface Training {
   shareId: string;
 }
 
-// Función helper para obtener el usuario actual
+// Función helper para obtener el usuario actual (sistema custom)
 const getCurrentUser = async () => {
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error) {
+  try {
+    // Obtener usuario desde localStorage en lugar de Supabase Auth
+    const userData = localStorage.getItem('user');
+    if (!userData) {
+      throw new Error('Usuario no autenticado');
+    }
+    
+    const user = JSON.parse(userData);
+    return { id: user.id };
+  } catch (error) {
     console.error('Error getting user:', error);
     throw new Error('Usuario no autenticado');
   }
-  if (!user) {
-    throw new Error('Usuario no autenticado');
-  }
-  return user;
 };
 
 export const getTrainings = async (): Promise<Training[]> => {
@@ -253,6 +257,7 @@ export const createTraining = async (trainingData: {
   }
 };
 
+// ... (las otras funciones updateTraining y deleteTraining permanecen igual)
 export const updateTraining = async (id: string, trainingData: {
   name: string;
   categories: string[];
