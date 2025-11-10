@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 interface Category {
   id: string;
@@ -41,83 +42,108 @@ const PublicTraining: React.FC = () => {
   const [training, setTraining] = useState<Training | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   // Estados del cronómetro
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
-  
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
- 
 
-  // Datos de ejemplo (en producción vendrían de una API)
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cargar entrenamiento desde Supabase
   useEffect(() => {
-    const mockTraining: Training = {
-      id: '1',
-      name: 'Entrenamiento Juveniles Semana 1',
-      categories: ['1', '2'],
-      exercises: [
-        {
-          exerciseId: '1',
-          customTime: 10, // 10 minutos
-          order: 1,
-          exercise: {
-            id: '1',
-            name: 'Calentamiento articular',
-            description: 'Rotaciones de tobillos, rodillas, caderas, hombros y cuello',
-            estimatedTime: 10,
-            categoryId: '1',
-            category: { id: '1', name: 'Calentamiento', color: 'bg-blue-100 text-blue-800' }
-          }
-        },
-        {
-          exerciseId: '2',
-          customTime: 15, // 15 minutos
-          order: 2,
-          exercise: {
-            id: '2',
-            name: 'Carrera continua',
-            description: 'Trote suave alrededor del campo durante 15 minutos',
-            estimatedTime: 15,
-            categoryId: '2',
-            category: { id: '2', name: 'Resistencia', color: 'bg-green-100 text-green-800' }
-          }
-        },
-        {
-          exerciseId: '3',
-          customTime: 20, // 20 minutos
-          order: 3,
-          exercise: {
-            id: '3',
-            name: 'Estaciones de fuerza',
-            description: 'Circuito con pesas, sentadillas, flexiones y abdominales',
-            estimatedTime: 25,
-            categoryId: '3',
-            category: { id: '3', name: 'Fuerza', color: 'bg-red-100 text-red-800' }
-          }
+    const loadTraining = async () => {
+      try {
+        setLoading(true);
+        
+        if (!shareId) {
+          setError('ID de entrenamiento no proporcionado');
+          setLoading(false);
+          return;
         }
-      ],
-      totalTime: 45,
-      observations: 'Enfocado en resistencia aeróbica y técnica básica. Realizar cada ejercicio con cuidado y mantener una hidratación adecuada.',
-      createdBy: '1',
-      createdAt: '2024-01-20',
-      updatedAt: '2024-01-20',
-      shareId: 'abc123'
+
+        // 1. Obtener el entrenamiento por shareId
+        const { data: trainingData, error: trainingError } = await supabase
+          .from('trainings')
+          .select(`
+            *,
+            training_exercises (
+              *,
+              exercises (
+                *,
+                categories (*)
+              )
+            )
+          `)
+          .eq('share_id', shareId)
+          .single();
+
+        if (trainingError) {
+          console.error('Error loading training:', trainingError);
+          setError('Entrenamiento no encontrado');
+          setLoading(false);
+          return;
+        }
+
+        if (!trainingData) {
+          setError('Entrenamiento no encontrado');
+          setLoading(false);
+          return;
+        }
+
+        // 2. Mapear los datos a la interfaz Training
+        const exercises: TrainingExercise[] = (trainingData.training_exercises || []).map((te: any) => ({
+          exerciseId: te.exercise_id,
+          customTime: te.custom_time || te.exercises?.estimated_time || 0,
+          order: te.exercise_order,
+          exercise: te.exercises ? {
+            id: te.exercises.id,
+            name: te.exercises.name,
+            description: te.exercises.description || '',
+            estimatedTime: te.exercises.estimated_time || 0,
+            categoryId: te.exercises.category_id,
+            category: te.exercises.categories ? {
+              id: te.exercises.categories.id,
+              name: te.exercises.categories.name,
+              color: te.exercises.categories.color || 'bg-blue-100 text-blue-800'
+            } : undefined
+          } : undefined
+        }));
+
+        // Ordenar ejercicios por order
+        exercises.sort((a, b) => a.order - b.order);
+
+        const training: Training = {
+          id: trainingData.id,
+          name: trainingData.name,
+          categories: trainingData.categories || [],
+          exercises: exercises,
+          totalTime: trainingData.total_time || 0,
+          observations: trainingData.observations || '',
+          createdBy: trainingData.created_by || '',
+          createdAt: trainingData.created_at,
+          updatedAt: trainingData.updated_at,
+          shareId: trainingData.share_id || ''
+        };
+
+        setTraining(training);
+        
+        // Configurar el cronómetro con el primer ejercicio
+        if (exercises.length > 0) {
+          setTimeLeft((exercises[0]?.customTime || 0) * 60);
+        }
+
+      } catch (error) {
+        console.error('Error in loadTraining:', error);
+        setError('Error al cargar el entrenamiento');
+      } finally {
+        setLoading(false);
+      }
     };
 
-    // Simular carga de API
-    setTimeout(() => {
-      if (shareId === 'abc123') {
-        setTraining(mockTraining);
-        // Convertir minutos a segundos para el cronómetro
-        setTimeLeft((mockTraining.exercises[0]?.customTime || 0) * 60);
-      } else {
-        setError('Entrenamiento no encontrado');
-      }
-      setLoading(false);
-    }, 1000);
+    loadTraining();
   }, [shareId]);
 
   // Efecto para el cronómetro
@@ -155,16 +181,16 @@ const PublicTraining: React.FC = () => {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      
+     
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
-      
+     
       oscillator.frequency.value = 800;
       oscillator.type = 'sine';
-      
+     
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
-      
+     
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 1);
     } catch (error) {
@@ -265,9 +291,9 @@ const PublicTraining: React.FC = () => {
       <header className="bg-sanse-red shadow-sm">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center space-x-3">
-            <img 
-              src="/images/logosanse.png" 
-              alt="Sanse Complutense" 
+            <img
+              src="/images/logosanse.png"
+              alt="Sanse Complutense"
               className="h-10 w-10 object-contain"
             />
             <div>
@@ -334,7 +360,7 @@ const PublicTraining: React.FC = () => {
                 <span>{Math.round(getProgressPercentage())}%</span>
               </div>
               <div className="w-full bg-white bg-opacity-20 rounded-full h-3">
-                <div 
+                <div
                   className="bg-white h-3 rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${getProgressPercentage()}%` }}
                 ></div>
@@ -354,11 +380,11 @@ const PublicTraining: React.FC = () => {
                     Ejercicio {currentExerciseIndex + 1} de {training.exercises.length}
                   </span>
                 </div>
-                
+               
                 <h2 className="text-3xl font-bold mb-3">
                   {currentExercise.exercise?.name}
                 </h2>
-                
+               
                 <p className="text-lg opacity-90 mb-8">
                   {currentExercise.exercise?.description}
                 </p>
@@ -368,7 +394,7 @@ const PublicTraining: React.FC = () => {
                   <div className="text-8xl font-mono font-bold mb-8 text-white">
                     {formatTime(timeLeft)}
                   </div>
-                  
+                 
                   <div className="flex justify-center gap-4 mb-6">
                     {!isRunning ? (
                       <button
@@ -395,10 +421,10 @@ const PublicTraining: React.FC = () => {
 
                   {/* Barra de progreso del ejercicio */}
                   <div className="w-full bg-white bg-opacity-20 rounded-full h-4">
-                    <div 
+                    <div
                       className="bg-green-400 h-4 rounded-full transition-all duration-1000 ease-linear"
-                      style={{ 
-                        width: `${((currentExercise.customTime * 60 - timeLeft) / (currentExercise.customTime * 60)) * 100}%` 
+                      style={{
+                        width: `${((currentExercise.customTime * 60 - timeLeft) / (currentExercise.customTime * 60)) * 100}%`
                       }}
                     ></div>
                   </div>
@@ -413,7 +439,7 @@ const PublicTraining: React.FC = () => {
                   >
                     ← Anterior
                   </button>
-                  
+                 
                   <button
                     onClick={nextExercise}
                     className="bg-white bg-opacity-20 text-white px-8 py-3 rounded-xl hover:bg-opacity-30 font-semibold transition-all"
@@ -430,7 +456,7 @@ const PublicTraining: React.FC = () => {
             <h3 className="text-2xl font-semibold mb-6 text-center">
               Lista de Ejercicios
             </h3>
-            
+           
             <div className="space-y-4">
               {training.exercises.map((exercise, index) => (
                 <div
@@ -471,7 +497,7 @@ const PublicTraining: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    
+                   
                     {index < currentExerciseIndex && (
                       <div className="text-green-400 text-2xl">✅</div>
                     )}

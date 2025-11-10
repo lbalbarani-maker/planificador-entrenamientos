@@ -179,6 +179,10 @@ export const getCategories = async (): Promise<Category[]> => {
   }
 };
 
+// Función para generar un ShareId único
+const generateShareId = (): string => {
+  return Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+};
 export const createTraining = async (trainingData: {
   name: string;
   categories: string[];
@@ -191,6 +195,9 @@ export const createTraining = async (trainingData: {
 
     console.log('Creating training for user:', user.id);
 
+    // Generar ShareId único
+    const shareId = generateShareId();
+
     // 1. Crear el entrenamiento principal
     const { data: training, error: trainingError } = await supabase
       .from('trainings')
@@ -201,6 +208,7 @@ export const createTraining = async (trainingData: {
           observations: trainingData.observations,
           total_time: trainingData.totalTime,
           created_by: user.id,
+          share_id: shareId, // <- Agregar el ShareId generado
           updated_at: new Date().toISOString()
         }
       ])
