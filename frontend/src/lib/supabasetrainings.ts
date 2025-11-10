@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Training, Exercise, Category, TrainingExercise } from '../types/training';
+import { Training, Exercise, Category } from '../types/training';
 
 // Obtener todos los entrenamientos del usuario actual
 export const getTrainings = async (): Promise<Training[]> => {
