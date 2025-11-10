@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Training, Exercise, Category, TrainingExercise } from '../types/training';
 import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
-import { supabase } from '../lib/supabase';
 
 const Trainings: React.FC = () => {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -26,25 +22,9 @@ const Trainings: React.FC = () => {
   const [cartExercises, setCartExercises] = useState<TrainingExercise[]>([]);
   const [totalTime, setTotalTime] = useState(0);
 
-  // Verificar autenticación al cargar el componente
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/login');
-        return;
-      }
-      setUser(user);
-    };
-    
-    checkAuth();
-  }, [navigate]);
-
   // Cargar datos
   useEffect(() => {
     const loadData = async () => {
-      if (!user) return;
-      
       try {
         setLoading(true);
         const [trainingsData, exercisesData, categoriesData] = await Promise.all([
@@ -63,10 +43,8 @@ const Trainings: React.FC = () => {
       }
     };
 
-    if (user) {
-      loadData();
-    }
-  }, [user]);
+    loadData();
+  }, []);
 
   // Efecto para actualizar tiempo total cuando cambia el carrito
   useEffect(() => {
