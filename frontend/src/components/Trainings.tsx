@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Training, Exercise, Category, TrainingExercise } from '../types/training';
-// Eliminar las importaciones no utilizadas
-// import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
+import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
 
 const Trainings: React.FC = () => {
   const [trainings, setTrainings] = useState<Training[]>([]);
@@ -23,8 +22,37 @@ const Trainings: React.FC = () => {
   const [cartExercises, setCartExercises] = useState<TrainingExercise[]>([]);
   const [totalTime, setTotalTime] = useState(0);
 
-  // Datos de ejemplo
+  // Cargar datos reales de Supabase
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        
+        // Cargar datos reales de Supabase
+        const [trainingsData, exercisesData, categoriesData] = await Promise.all([
+          getTrainings(),
+          getExercises(),
+          getCategories()
+        ]);
+
+        setTrainings(trainingsData || []);
+        setExercises(exercisesData || []);
+        setCategories(categoriesData || []);
+        
+      } catch (error) {
+        console.error('Error cargando datos:', error);
+        // Fallback a datos mock si hay error
+        loadMockData();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Datos de ejemplo como fallback
+  const loadMockData = () => {
     const mockCategories: Category[] = [
       { id: '1', name: 'Calentamiento', color: 'bg-blue-100 text-blue-800' },
       { id: '2', name: 'Resistencia', color: 'bg-green-100 text-green-800' },
@@ -91,29 +119,13 @@ const Trainings: React.FC = () => {
         createdAt: '2024-01-20',
         updatedAt: '2024-01-20',
         shareId: 'abc123'
-      },
-      {
-        id: '2',
-        name: 'Entrenamiento Fuerza Avanzado',
-        categories: ['3'],
-        exercises: [
-          { exerciseId: '3', customTime: 30, order: 1, exercise: mockExercises[2] },
-          { exerciseId: '4', customTime: 25, order: 2, exercise: mockExercises[3] }
-        ],
-        totalTime: 55,
-        observations: 'Para jugadores senior con buena condición física',
-        createdBy: '1',
-        createdAt: '2024-01-21',
-        updatedAt: '2024-01-21',
-        shareId: 'def456'
       }
     ];
 
     setCategories(mockCategories);
     setExercises(mockExercises);
     setTrainings(mockTrainings);
-    setLoading(false);
-  }, []);
+  };
 
   // Efecto para actualizar tiempo total cuando cambia el carrito
   useEffect(() => {
@@ -121,12 +133,7 @@ const Trainings: React.FC = () => {
     setTotalTime(total);
   }, [cartExercises]);
 
-  // ELIMINAR: Esta variable ya no se usa después de quitar los filtros
-  // const filteredExercises = exercises.filter(exercise =>
-  //   formData.categories.length === 0 || formData.categories.includes(exercise.categoryId)
-  // );
-
-  // Agregar ejercicio al carrito - CORREGIDO
+  // Agregar ejercicio al carrito
   const addToCart = (exercise: Exercise) => {
     const existingItem = cartExercises.find(item => item.exerciseId === exercise.id);
    
@@ -150,7 +157,7 @@ const Trainings: React.FC = () => {
     }
   };
 
-  // Eliminar ejercicio del carrito - CORREGIDO
+  // Eliminar ejercicio del carrito
   const removeFromCart = (exerciseId: string) => {
     const updatedCart = cartExercises.filter(item => item.exerciseId !== exerciseId);
     // Reordenar los ejercicios restantes
@@ -161,7 +168,7 @@ const Trainings: React.FC = () => {
     setCartExercises(reorderedCart);
   };
 
-  // Ajustar tiempo de un ejercicio - CORREGIDO
+  // Ajustar tiempo de un ejercicio
   const adjustTime = (exerciseId: string, adjustment: number) => {
     const updatedCart = cartExercises.map(item =>
       item.exerciseId === exerciseId
@@ -173,12 +180,11 @@ const Trainings: React.FC = () => {
 
   // Mover ejercicio hacia arriba
   const moveExerciseUp = (index: number) => {
-    if (index === 0) return; // Ya está en la parte superior
+    if (index === 0) return;
    
     const newCart = [...cartExercises];
     [newCart[index - 1], newCart[index]] = [newCart[index], newCart[index - 1]];
    
-    // Actualizar órdenes
     const reorderedCart = newCart.map((item, idx) => ({
       ...item,
       order: idx + 1
@@ -189,12 +195,11 @@ const Trainings: React.FC = () => {
 
   // Mover ejercicio hacia abajo
   const moveExerciseDown = (index: number) => {
-    if (index === cartExercises.length - 1) return; // Ya está en la parte inferior
+    if (index === cartExercises.length - 1) return;
    
     const newCart = [...cartExercises];
     [newCart[index], newCart[index + 1]] = [newCart[index + 1], newCart[index]];
    
-    // Actualizar órdenes
     const reorderedCart = newCart.map((item, idx) => ({
       ...item,
       order: idx + 1
@@ -218,7 +223,6 @@ const Trainings: React.FC = () => {
     const newCart = [...cartExercises];
     const [movedItem] = newCart.splice(draggedItem, 1);
     newCart.splice(targetIndex, 0, movedItem);
-    // Actualizar órdenes
     const reorderedCart = newCart.map((item, idx) => ({
       ...item,
       order: idx + 1
@@ -250,8 +254,8 @@ const Trainings: React.FC = () => {
     setDraggedItem(null);
   };
 
-  // Crear o actualizar entrenamiento
-  const handleSaveTraining = (e: React.FormEvent) => {
+  // Crear o actualizar entrenamiento EN SUPABASE
+  const handleSaveTraining = async (e: React.FormEvent) => {
     e.preventDefault();
    
     if (cartExercises.length === 0) {
@@ -263,49 +267,47 @@ const Trainings: React.FC = () => {
       return;
     }
 
-    // MODIFICACIÓN 1: Extraer IDs de categorías únicos de los ejercicios en el carrito
-    const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item => 
-      item.exercise?.categoryId
-    ).filter(Boolean))) as string[];
+    try {
+      // Extraer IDs de categorías únicos de los ejercicios en el carrito
+      const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item => 
+        item.exercise?.categoryId
+      ).filter(Boolean))) as string[];
 
-    if (editingTraining) {
-      // Actualizar entrenamiento existente
-      const updatedTrainings = trainings.map(t =>
-        t.id === editingTraining.id
-          ? {
-              ...t,
-              name: formData.name,
-              // MODIFICACIÓN 1: Usar categorías de los ejercicios en lugar del formulario
-              categories: uniqueCategoryIds,
-              exercises: cartExercises,
-              totalTime: totalTime,
-              observations: formData.observations,
-              updatedAt: new Date().toISOString().split('T')[0]
-            }
-          : t
-      );
-      setTrainings(updatedTrainings);
-     
-    } else {
-      // Crear nuevo entrenamiento
-      const newTraining: Training = {
-        id: (trainings.length + 1).toString(),
+      // Preparar datos para Supabase (sin campos auto-generados)
+      const trainingData = {
         name: formData.name,
-        // MODIFICACIÓN 1: Usar categorías de los ejercicios en lugar del formulario
         categories: uniqueCategoryIds,
         exercises: cartExercises,
         totalTime: totalTime,
         observations: formData.observations,
-        createdBy: '1',
-        createdAt: new Date().toISOString().split('T')[0],
-        updatedAt: new Date().toISOString().split('T')[0],
-        shareId: Math.random().toString(36).substring(2, 10).toUpperCase()
+        createdBy: '1' // Esto debería venir del usuario autenticado
       };
-      setTrainings([...trainings, newTraining]);
+
+      if (editingTraining) {
+        // Actualizar entrenamiento existente EN SUPABASE
+        const updatedTraining = await updateTraining(editingTraining.id, trainingData);
+
+        // Actualizar estado local
+        const updatedTrainings = trainings.map(t =>
+          t.id === editingTraining.id ? updatedTraining : t
+        );
+        setTrainings(updatedTrainings);
+       
+      } else {
+        // Crear nuevo entrenamiento EN SUPABASE
+        const newTraining = await createTraining(trainingData);
+
+        // Actualizar estado local
+        setTrainings([...trainings, newTraining]);
+      }
      
+      resetForm();
+      alert(editingTraining ? 'Entrenamiento actualizado correctamente' : 'Entrenamiento creado correctamente');
+      
+    } catch (error) {
+      console.error('Error guardando entrenamiento:', error);
+      alert('Error al guardar el entrenamiento. Por favor, intenta nuevamente.');
     }
-   
-    resetForm();
   };
 
   // Copiar enlace compartible
@@ -314,7 +316,6 @@ const Trainings: React.FC = () => {
     navigator.clipboard.writeText(shareUrl).then(() => {
       alert('Enlace copiado al portapapeles!');
     }).catch(() => {
-      // Fallback para navegadores que no soportan clipboard
       prompt('Copia este enlace:', shareUrl);
     });
   };
@@ -370,7 +371,7 @@ const Trainings: React.FC = () => {
         return colorMap[baseColorClass] || { bg: '#e5e7eb', text: '#374151', border: '#9ca3af' };
       };
 
-      // MODIFICACIÓN 2: Verificar si hay ejercicios sin categoría
+      // Verificar si hay ejercicios sin categoría
       const exercisesWithoutCategory = training.exercises.filter(item => !item.exercise?.category);
       if (exercisesWithoutCategory.length > 0) {
         console.warn(`${exercisesWithoutCategory.length} ejercicios sin categoría asignada`);
@@ -500,7 +501,7 @@ const Trainings: React.FC = () => {
                         ${category.name}
                       </span>
                     ` : `
-                      <span style="background: #e5e7eb; color: #374151; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid #9ca3af;">
+                      <span style="background: #e5e7eb; color: '#374151'; padding: 4px 8px; border-radius: 15px; font-weight: bold; border: 1px solid #9ca3af;">
                         Sin categoría
                       </span>
                     `}
@@ -570,12 +571,19 @@ const Trainings: React.FC = () => {
     }
   };
 
-  // Eliminar entrenamiento
-  const handleDeleteTraining = (id: string, name: string) => {
+  // Eliminar entrenamiento DE SUPABASE
+  const handleDeleteTraining = async (id: string, name: string) => {
     if (window.confirm(`¿Estás seguro de eliminar el entrenamiento "${name}"?`)) {
-      const updatedTrainings = trainings.filter(t => t.id !== id);
-      setTrainings(updatedTrainings);
-     
+      try {
+        await deleteTraining(id);
+        // Actualizar estado local
+        const updatedTrainings = trainings.filter(t => t.id !== id);
+        setTrainings(updatedTrainings);
+        alert('Entrenamiento eliminado correctamente');
+      } catch (error) {
+        console.error('Error eliminando entrenamiento:', error);
+        alert('Error al eliminar el entrenamiento. Por favor, intenta nuevamente.');
+      }
     }
   };
 
