@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { usersApi } from '../lib/supabaseUsers';
+import { supabase } from '../lib/supabase';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -13,21 +13,17 @@ const Login: React.FC = () => {
     setError('');
 
     try {
-      // Buscar usuario en Supabase
-      const user = await usersApi.loginUser(email, password);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      if (user) {
-        // Login exitoso - guardar sesión
-        localStorage.setItem('user', JSON.stringify({
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          fullName: user.full_name
-        }));
-        
-        window.location.reload();
-      } else {
-        setError('Credenciales incorrectas o usuario inactivo');
+      if (error) {
+        setError(error.message);
+      } else if (data.user) {
+        // El redireccionamiento lo maneja automáticamente App.tsx
+        // a través del onAuthStateChange
+        console.log('Login exitoso');
       }
     } catch (error) {
       console.error('Error en login:', error);
@@ -40,13 +36,12 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-md w-96">
-       
         {/* Logo real */}
         <div className="flex justify-center mb-6">
           <div className="flex flex-col items-center">
-            <img 
-              src="/images/logosanse2.png" 
-              alt="Sanse Complutense" 
+            <img
+              src="/images/logosanse2.png"
+              alt="Sanse Complutense"
               className="h-20 w-20 object-contain mb-4"
             />
             <h2 className="text-2xl font-bold text-center text-sanse-blue mb-2">
@@ -57,13 +52,11 @@ const Login: React.FC = () => {
             </p>
           </div>
         </div>
-
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
           </div>
         )}
-
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">
@@ -79,7 +72,6 @@ const Login: React.FC = () => {
               placeholder="tu@email.com"
             />
           </div>
-
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2">
               Contraseña
@@ -94,7 +86,6 @@ const Login: React.FC = () => {
               placeholder="••••••••"
             />
           </div>
-
           <button
             type="submit"
             disabled={loading}
@@ -103,8 +94,6 @@ const Login: React.FC = () => {
             {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
           </button>
         </form>
-
-        
       </div>
     </div>
   );

@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Training, Exercise, Category, TrainingExercise } from '../types/training';
-import { getTrainings, getExercises, getCategories, createTraining, updateTraining, deleteTraining } from '../lib/supabasetrainings';
+import { 
+  Training, 
+  Exercise, 
+  Category, 
+  TrainingExercise,
+  getTrainings, 
+  getExercises, 
+  getCategories, 
+  createTraining, 
+  updateTraining, 
+  deleteTraining 
+} from '../lib/supabasetrainings';
 
 const Trainings: React.FC = () => {
   const [trainings, setTrainings] = useState<Training[]>([]);
@@ -32,7 +42,6 @@ const Trainings: React.FC = () => {
           getExercises(),
           getCategories()
         ]);
-
         setTrainings(trainingsData || []);
         setExercises(exercisesData || []);
         setCategories(categoriesData || []);
@@ -48,18 +57,19 @@ const Trainings: React.FC = () => {
 
   // Efecto para actualizar tiempo total cuando cambia el carrito
   useEffect(() => {
-    const total = cartExercises.reduce((sum: number, item: TrainingExercise) => sum + item.customTime, 0);
+    const total = cartExercises.reduce((sum: number, item: TrainingExercise) => 
+      sum + (item.customTime || 0), 0);
     setTotalTime(total);
   }, [cartExercises]);
 
   // Agregar ejercicio al carrito
   const addToCart = (exercise: Exercise) => {
     const existingItem = cartExercises.find(item => item.exerciseId === exercise.id);
-   
+    
     if (existingItem) {
       const updatedCart = cartExercises.map(item =>
         item.exerciseId === exercise.id
-          ? { ...item, customTime: item.customTime + 5 }
+          ? { ...item, customTime: (item.customTime || 0) + 5 }
           : item
       );
       setCartExercises(updatedCart);
@@ -88,7 +98,7 @@ const Trainings: React.FC = () => {
   const adjustTime = (exerciseId: string, adjustment: number) => {
     const updatedCart = cartExercises.map(item =>
       item.exerciseId === exerciseId
-        ? { ...item, customTime: Math.max(1, item.customTime + adjustment) }
+        ? { ...item, customTime: Math.max(1, (item.customTime || 0) + adjustment) }
         : item
     );
     setCartExercises(updatedCart);
@@ -97,30 +107,30 @@ const Trainings: React.FC = () => {
   // Mover ejercicio hacia arriba
   const moveExerciseUp = (index: number) => {
     if (index === 0) return;
-   
+    
     const newCart = [...cartExercises];
     [newCart[index - 1], newCart[index]] = [newCart[index], newCart[index - 1]];
-   
+    
     const reorderedCart = newCart.map((item, idx) => ({
       ...item,
       order: idx + 1
     }));
-   
+    
     setCartExercises(reorderedCart);
   };
 
   // Mover ejercicio hacia abajo
   const moveExerciseDown = (index: number) => {
     if (index === cartExercises.length - 1) return;
-   
+    
     const newCart = [...cartExercises];
     [newCart[index], newCart[index + 1]] = [newCart[index + 1], newCart[index]];
-   
+    
     const reorderedCart = newCart.map((item, idx) => ({
       ...item,
       order: idx + 1
     }));
-   
+    
     setCartExercises(reorderedCart);
   };
 
@@ -173,7 +183,7 @@ const Trainings: React.FC = () => {
   // Crear o actualizar entrenamiento
   const handleSaveTraining = async (e: React.FormEvent) => {
     e.preventDefault();
-   
+    
     if (cartExercises.length === 0) {
       alert('Agrega al menos un ejercicio al entrenamiento');
       return;
@@ -184,7 +194,7 @@ const Trainings: React.FC = () => {
     }
 
     try {
-      const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item => 
+      const uniqueCategoryIds = Array.from(new Set(cartExercises.map(item =>
         item.exercise?.categoryId
       ).filter(Boolean))) as string[];
 
@@ -192,7 +202,7 @@ const Trainings: React.FC = () => {
         name: formData.name,
         categories: uniqueCategoryIds,
         exercises: cartExercises,
-        total_time: totalTime,
+        totalTime: totalTime,
         observations: formData.observations
       };
 
@@ -206,7 +216,7 @@ const Trainings: React.FC = () => {
         const newTraining = await createTraining(trainingData);
         setTrainings([...trainings, newTraining]);
       }
-     
+      
       resetForm();
       alert(editingTraining ? 'Entrenamiento actualizado correctamente' : 'Entrenamiento creado correctamente');
       
@@ -229,7 +239,9 @@ const Trainings: React.FC = () => {
   // Descargar PDF del entrenamiento
   const downloadPDF = async (training: Training) => {
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      // Obtener usuario desde Supabase Auth en lugar de localStorage
+      const { data: { user } } = await import('../lib/supabase').then(mod => mod.supabase.auth.getUser());
+      
       const currentDate = new Date().toLocaleDateString('es-ES', {
         year: 'numeric',
         month: 'long',
@@ -237,7 +249,7 @@ const Trainings: React.FC = () => {
       });
       
       const categoryTimes: {[key: string]: {name: string, time: number, color: string}} = {};
-     
+      
       training.exercises.forEach((exerciseItem: TrainingExercise) => {
         const exercise = exerciseItem.exercise;
         if (exercise && exercise.category) {
@@ -249,7 +261,7 @@ const Trainings: React.FC = () => {
               color: exercise.category.color
             };
           }
-          categoryTimes[categoryId].time += exerciseItem.customTime;
+          categoryTimes[categoryId].time += exerciseItem.customTime || 0;
         }
       });
 
@@ -297,7 +309,7 @@ const Trainings: React.FC = () => {
               <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; text-align: left;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                   <span>Preparador físico:</span>
-                  <span style="font-weight: bold;">${user.fullName || 'Usuario'}</span>
+                  <span style="font-weight: bold;">${user?.user_metadata?.full_name || 'Usuario'}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                   <span>Fecha:</span>
@@ -511,7 +523,6 @@ const Trainings: React.FC = () => {
                     Las categorías se asignarán automáticamente según los ejercicios seleccionados
                   </p>
                 </div>
-
                 <div className="space-y-3">
                   {exercises.map((exercise: Exercise) => (
                     <div key={exercise.id} className="bg-gray-50 p-4 rounded-lg border hover:shadow-md transition-shadow">
@@ -606,7 +617,7 @@ const Trainings: React.FC = () => {
                                     <button
                                       onClick={() => adjustTime(item.exerciseId, -5)}
                                       className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center hover:bg-gray-300 transition-colors"
-                                      disabled={item.customTime <= 1}
+                                      disabled={(item.customTime || 0) <= 1}
                                     >
                                       -
                                     </button>

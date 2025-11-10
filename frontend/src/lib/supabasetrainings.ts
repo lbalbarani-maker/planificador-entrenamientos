@@ -1,5 +1,40 @@
 import { supabase } from './supabase';
-import { Training, Exercise, Category, TrainingExercise } from '../types/training';
+
+// Definimos los tipos aquí para evitar dependencias externas
+export interface Category {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface Exercise {
+  id: string;
+  name: string;
+  description: string;
+  estimatedTime: number;
+  categoryId: string;
+  category?: Category;
+}
+
+export interface TrainingExercise {
+  exerciseId: string;
+  customTime?: number;
+  order: number;
+  exercise?: Exercise;
+}
+
+export interface Training {
+  id: string;
+  name: string;
+  categories: string[];
+  exercises: TrainingExercise[];
+  totalTime: number;
+  observations: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  shareId: string;
+}
 
 // Función helper para obtener el usuario actual
 const getCurrentUser = async () => {
@@ -17,7 +52,7 @@ const getCurrentUser = async () => {
 export const getTrainings = async (): Promise<Training[]> => {
   try {
     const user = await getCurrentUser();
-    
+
     const { data, error } = await supabase
       .from('trainings')
       .select(`
@@ -30,7 +65,7 @@ export const getTrainings = async (): Promise<Training[]> => {
           )
         )
       `)
-      .eq('created_by', user.id) // Solo los entrenamientos del usuario actual
+      .eq('created_by', user.id)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -74,6 +109,7 @@ export const getTrainings = async (): Promise<Training[]> => {
         shareId: training.share_id || ''
       };
     });
+
   } catch (error) {
     console.error('Error in getTrainings:', error);
     throw error;
@@ -106,6 +142,7 @@ export const getExercises = async (): Promise<Exercise[]> => {
         color: exercise.categories.color || 'bg-gray-100 text-gray-800'
       } : undefined
     }));
+
   } catch (error) {
     console.error('Error in getExercises:', error);
     return [];
@@ -131,16 +168,23 @@ export const getCategories = async (): Promise<Category[]> => {
       name: category.name,
       color: category.color || 'bg-gray-100 text-gray-800'
     }));
+
   } catch (error) {
     console.error('Error in getCategories:', error);
     return [];
   }
 };
 
-export const createTraining = async (trainingData: any): Promise<Training> => {
+export const createTraining = async (trainingData: {
+  name: string;
+  categories: string[];
+  exercises: TrainingExercise[];
+  totalTime: number;
+  observations: string;
+}): Promise<Training> => {
   try {
     const user = await getCurrentUser();
-    
+
     console.log('Creating training for user:', user.id);
 
     // 1. Crear el entrenamiento principal
@@ -151,8 +195,8 @@ export const createTraining = async (trainingData: any): Promise<Training> => {
           name: trainingData.name,
           categories: trainingData.categories,
           observations: trainingData.observations,
-          total_time: trainingData.total_time,
-          created_by: user.id, // UUID real del usuario
+          total_time: trainingData.totalTime,
+          created_by: user.id,
           updated_at: new Date().toISOString()
         }
       ])
@@ -189,7 +233,7 @@ export const createTraining = async (trainingData: any): Promise<Training> => {
 
     console.log('Training created successfully:', training);
 
-    // 3. Retornar el training completo con ejercicios
+    // 3. Retornar el training completo
     return {
       id: training.id,
       name: training.name,
@@ -202,16 +246,23 @@ export const createTraining = async (trainingData: any): Promise<Training> => {
       updatedAt: training.updated_at,
       shareId: training.share_id || ''
     };
+
   } catch (error) {
     console.error('Error in createTraining:', error);
     throw error;
   }
 };
 
-export const updateTraining = async (id: string, trainingData: any): Promise<Training> => {
+export const updateTraining = async (id: string, trainingData: {
+  name: string;
+  categories: string[];
+  exercises: TrainingExercise[];
+  totalTime: number;
+  observations: string;
+}): Promise<Training> => {
   try {
     const user = await getCurrentUser();
-    
+
     console.log('Updating training:', id, 'for user:', user.id);
 
     // 1. Verificar que el training pertenece al usuario actual
@@ -237,7 +288,7 @@ export const updateTraining = async (id: string, trainingData: any): Promise<Tra
         name: trainingData.name,
         categories: trainingData.categories,
         observations: trainingData.observations,
-        total_time: trainingData.total_time,
+        total_time: trainingData.totalTime,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -297,6 +348,7 @@ export const updateTraining = async (id: string, trainingData: any): Promise<Tra
       updatedAt: training.updated_at,
       shareId: training.share_id || ''
     };
+
   } catch (error) {
     console.error('Error in updateTraining:', error);
     throw error;
@@ -346,6 +398,7 @@ export const deleteTraining = async (id: string): Promise<void> => {
     }
 
     console.log('Training deleted successfully');
+
   } catch (error) {
     console.error('Error in deleteTraining:', error);
     throw error;
