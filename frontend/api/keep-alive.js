@@ -7,18 +7,13 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Método no permitido' });
   }
 
-  // Clave de verificación opcional
-  const { secret } = req.query;
-  if (process.env.KEEP_ALIVE_SECRET && secret !== process.env.KEEP_ALIVE_SECRET) {
-    return res.status(401).json({ error: 'No autorizado' });
-  }
-
   try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    // Usa las variables que YA tienes en Vercel
+    const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+    const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Faltan variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY');
+      throw new Error('Faltan variables de entorno REACT_APP_SUPABASE_URL o REACT_APP_SUPABASE_ANON_KEY');
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
