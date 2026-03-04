@@ -5,6 +5,12 @@ import Dashboard from './components/Dashboard';
 import Trainings from './components/Trainings';
 import Exercises from './components/Exercises';
 import PublicTraining from './components/PublicTraining';
+import MatchList from './components/Hockey/MatchList';
+import MatchSetup from './components/Hockey/MatchSetup';
+import MatchAdmin from './components/Hockey/MatchAdmin';
+import MatchSpectator from './components/Hockey/MatchSpectator';
+import TeamsList from './components/Teams/TeamsList';
+import TeamDetail from './components/Teams/TeamDetail';
 import './App.css';
 
 function App() {
@@ -63,6 +69,16 @@ function App() {
         <Route path="/" element={user ? <Dashboard /> : <Navigate to="/login" replace />} />
         <Route path="/trainings" element={user ? <Trainings /> : <Navigate to="/login" replace />} />
         <Route path="/exercises" element={user ? <Exercises /> : <Navigate to="/login" replace />} />
+        
+        {/* Rutas de Hockey */}
+        <Route path="/hockey" element={user ? <MatchList /> : <Navigate to="/login" replace />} />
+        <Route path="/hockey/new" element={user ? <MatchSetup /> : <Navigate to="/login" replace />} />
+        <Route path="/hockey/:id" element={user ? <MatchAdmin /> : <Navigate to="/login" replace />} />
+        <Route path="/hockey/:token/watch" element={<MatchSpectator />} />
+        
+        {/* Rutas de Equipos */}
+        <Route path="/teams" element={user ? <TeamsList /> : <Navigate to="/login" replace />} />
+        <Route path="/teams/:id" element={user ? <TeamDetail /> : <Navigate to="/login" replace />} />
         
         {/* Ruta por defecto */}
         <Route path="*" element={<Navigate to="/" replace />} />

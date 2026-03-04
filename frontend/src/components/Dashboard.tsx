@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Users from './Users'; // ← IMPORT AÑADIDO
 import Exercises from './Exercises';
 import Categories from './Categories';
@@ -6,6 +7,7 @@ import Trainings from './Trainings';
 
 const Dashboard: React.FC = () => {
   const [currentView, setCurrentView] = useState<'dashboard' | 'exercises' | 'categories' | 'trainings' | 'users'>('dashboard');
+  const navigate = useNavigate();
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -56,11 +58,43 @@ const Dashboard: React.FC = () => {
       >
         <div className="flex items-center">
           <div className="bg-green-500 text-white p-3 rounded-lg">
-            🏑
+            🏋️
           </div>
           <div className="ml-4">
             <h3 className="text-lg font-semibold text-gray-800">Entrenamientos</h3>
             <p className="text-gray-600">Crear sesiones</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tarjeta de Partidos de Hockey */}
+      <div 
+        className="bg-white p-6 rounded-lg shadow-md border-l-4 border-orange-500 cursor-pointer hover:shadow-lg transition-shadow"
+        onClick={() => navigate('/hockey')}
+      >
+        <div className="flex items-center">
+          <div className="bg-orange-500 text-white p-3 rounded-lg">
+            🏑
+          </div>
+          <div className="ml-4">
+            <h3 className="text-lg font-semibold text-gray-800">Partidos de Hockey</h3>
+            <p className="text-gray-600">Marcador en vivo</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tarjeta de Equipos */}
+      <div 
+        className="bg-white p-6 rounded-lg shadow-md border-l-4 border-indigo-500 cursor-pointer hover:shadow-lg transition-shadow"
+        onClick={() => navigate('/teams')}
+      >
+        <div className="flex items-center">
+          <div className="bg-indigo-500 text-white p-3 rounded-lg">
+            🏅
+          </div>
+          <div className="ml-4">
+            <h3 className="text-lg font-semibold text-gray-800">Equipos</h3>
+            <p className="text-gray-600">Gestionar equipos y convocatorias</p>
           </div>
         </div>
       </div>
@@ -167,6 +201,12 @@ const Dashboard: React.FC = () => {
                 }`}
               >
                 Entrenamientos
+              </button>
+              <button
+                onClick={() => navigate('/hockey')}
+                className="px-4 py-2 rounded-md bg-orange-500 text-white hover:bg-orange-600"
+              >
+                🏑 Hockey
               </button>
               {user.role === 'admin' && (
                 <button
