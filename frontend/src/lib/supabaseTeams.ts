@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import {
+  Club,
   Team,
   Player,
   TeamPlayer,
@@ -10,7 +11,34 @@ import {
   CreateConvocationInput,
   Field,
   OpponentTeam,
+  Training,
 } from '../types/teams';
+
+export const trainingsApi = {
+  async getAllTrainings(): Promise<Training[]> {
+    const { data, error } = await supabase
+      .from('trainings')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching trainings:', error);
+      return [];
+    }
+    return data || [];
+  },
+
+  async getTraining(id: string): Promise<Training | null> {
+    const { data, error } = await supabase
+      .from('trainings')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) return null;
+    return data;
+  },
+};
 
 const getCurrentUser = async () => {
   const userData = localStorage.getItem('user');
@@ -20,13 +48,20 @@ const getCurrentUser = async () => {
 
 export const teamsApi = {
   async getTeams(): Promise<Team[]> {
-    const user = await getCurrentUser();
+    const userData = localStorage.getItem('user');
+    console.log('getTeams - user from localStorage:', userData ? JSON.parse(userData) : null);
+    
     const { data, error } = await supabase
       .from('teams')
-      .select('*')
+      .select('*, club:clubs(id, name, primary_color, secondary_color)')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    console.log('getTeams - query result:', { data, error });
+    
+    if (error) {
+      console.error('getTeams - error:', error);
+      throw error;
+    }
     return data || [];
   },
 
@@ -102,13 +137,19 @@ export const teamsApi = {
   },
 
   async getTeamPlayers(teamId: string): Promise<TeamPlayer[]> {
+    console.log('getTeamPlayers - teamId:', teamId);
     const { data, error } = await supabase
       .from('team_players')
       .select('*, player:players(*)')
       .eq('team_id', teamId)
       .order('shirt_number', { ascending: true });
 
-    if (error) throw error;
+    console.log('getTeamPlayers - result:', { data, error });
+    
+    if (error) {
+      console.error('getTeamPlayers - error:', error);
+      throw error;
+    }
     return data || [];
   },
 
@@ -157,7 +198,7 @@ export const eventsApi = {
   async getEvents(teamId?: string): Promise<Event[]> {
     let query = supabase
       .from('events')
-      .select('*, team:teams(*)')
+      .select('*, team:teams(*), training:trainings(*)')
       .order('start_datetime', { ascending: true });
 
     if (teamId) {
@@ -171,11 +212,12 @@ export const eventsApi = {
   },
 
   async getUpcomingEvents(limit: number = 10): Promise<Event[]> {
-    const now = new Date().toISOString();
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from('events')
       .select('*, team:teams(*)')
-      .gte('start_datetime', now)
+      .gte('start_datetime', sevenDaysAgo)
       .order('start_datetime', { ascending: true })
       .limit(limit);
 
@@ -183,14 +225,30 @@ export const eventsApi = {
     return data || [];
   },
 
+  async getAllEvents(): Promise<Event[]> {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*, team:teams(*)')
+      .order('start_datetime', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  },
+
   async createEvent(input: CreateEventInput): Promise<Event> {
+    console.log('=== API createEvent ===');
+    console.log('Input:', input);
     const { data, error } = await supabase
       .from('events')
       .insert([input])
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase error:', error);
+      throw error;
+    }
+    console.log('Created event:', data);
     return data;
   },
 
@@ -214,18 +272,54 @@ export const eventsApi = {
 
     if (error) throw error;
   },
+
+  async linkTraining(eventId: string, trainingId: string | null): Promise<Event> {
+    const { data, error } = await supabase
+      .from('events')
+      .update({ training_id: trainingId })
+      .eq('id', eventId)
+      .select('*, team:teams(*), training:trainings(*)')
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
 };
 
 export const convocationApi = {
   async getConvocation(eventId: string): Promise<Convocation[]> {
     const { data, error } = await supabase
       .from('convocation')
-      .select('*, player:players(*)')
-      .eq('event_id', eventId)
-      .order('player.full_name', { ascending: true });
+      .select('*')
+      .eq('event_id', eventId);
 
-    if (error) throw error;
-    return data || [];
+    if (error) {
+      console.error('Error fetching convocation:', error);
+      return [];
+    }
+    
+    if (!data || data.length === 0) return [];
+    
+    const playerIds = data.map(c => c.player_id).filter(Boolean);
+    let playersMap: Record<string, any> = {};
+    
+    if (playerIds.length > 0) {
+      const { data: players } = await supabase
+        .from('players')
+        .select('id, full_name')
+        .in('id', playerIds);
+      
+      if (players) {
+        players.forEach(p => {
+          playersMap[p.id] = { name: p.full_name };
+        });
+      }
+    }
+    
+    return data.map(c => ({
+      ...c,
+      player: playersMap[c.player_id] || null
+    }));
   },
 
   async createConvocation(input: CreateConvocationInput): Promise<Convocation> {
@@ -288,10 +382,9 @@ export const fieldsApi = {
   },
 
   async createField(field: Omit<Field, 'id' | 'created_at'>): Promise<Field> {
-    const user = await getCurrentUser();
     const { data, error } = await supabase
       .from('fields')
-      .insert([{ ...field, club_id: user.club_id }])
+      .insert([field])
       .select()
       .single();
 
@@ -360,6 +453,61 @@ export const opponentTeamsApi = {
   async deleteOpponentTeam(id: string): Promise<void> {
     const { error } = await supabase
       .from('opponent_teams')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  },
+};
+
+export const clubsApi = {
+  async getClubs(): Promise<Club[]> {
+    const { data, error } = await supabase
+      .from('clubs')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async getClub(id: string): Promise<Club | null> {
+    const { data, error } = await supabase
+      .from('clubs')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) return null;
+    return data;
+  },
+
+  async createClub(club: Partial<Club>): Promise<Club> {
+    const { data, error } = await supabase
+      .from('clubs')
+      .insert([club])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updateClub(id: string, club: Partial<Club>): Promise<Club> {
+    const { data, error } = await supabase
+      .from('clubs')
+      .update(club)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteClub(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('clubs')
       .delete()
       .eq('id', id);
 

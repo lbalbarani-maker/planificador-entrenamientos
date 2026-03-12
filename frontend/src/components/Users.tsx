@@ -1,16 +1,56 @@
 import React, { useState, useEffect } from 'react';
+import BackButton from './BackButton';
 import { usersApi, User } from '../lib/supabaseUsers';
 
 const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<{id: string, email: string} | null>(null);
   const [formData, setFormData] = useState({
     email: '',
     full_name: '',
     password: '',
-    role: 'preparador' as 'admin' | 'preparador'
+    roles: [] as string[]
   });
+  
+  const getRoleLabels = (roleString: string): string => {
+    if (!roleString) return '-';
+    const roles = roleString.split(',');
+    const roleNames: Record<string, string> = {
+      admin: 'Admin',
+      admin_club: 'Admin Club',
+      entrenador: 'Entrenador',
+      preparador: 'Prep. Físico',
+      coordinador: 'Coordinador',
+      delegado: 'Delegado',
+      tesorero: 'Tesorero',
+      jugador: 'Jugador',
+      padre: 'Padre/Tutor'
+    };
+    return roles.map(r => roleNames[r] || r).join(', ');
+  };
+
+  const hasRole = (roleString: string, role: string): boolean => {
+    if (!roleString) return false;
+    return roleString.split(',').includes(role);
+  };
+
+  const AVAILABLE_ROLES = [
+    { value: 'admin', label: 'Administrador' },
+    { value: 'admin_club', label: 'Admin Club' },
+    { value: 'entrenador', label: 'Entrenador' },
+    { value: 'preparador', label: 'Preparador Físico' },
+    { value: 'coordinador', label: 'Coordinador' },
+    { value: 'delegado', label: 'Delegado' },
+    { value: 'tesorero', label: 'Tesorero' },
+    { value: 'jugador', label: 'Jugador' },
+    { value: 'padre', label: 'Padre/Tutor' }
+  ];
+
   const [loading, setLoading] = useState(false);
 
   // Cargar usuarios desde Supabase
@@ -31,23 +71,28 @@ const Users: React.FC = () => {
     loadUsers();
   }, []);
 
-  const handleCreateUser = async (e: React.FormEvent) => {
+const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
     try {
+      const roleString = formData.roles.join(',');
       const newUser = await usersApi.createUser({
         email: formData.email,
         full_name: formData.full_name,
         password: formData.password || 'default123',
-        role: formData.role,
-        is_active: true
+        role: roleString,
+        is_active: true,
+        club_id: null,
+        is_super_admin: false,
+        is_club_admin: false
       });
       
-      setUsers([...users, newUser]);
+setUsers([...users, newUser]);
       setShowForm(false);
-      setFormData({ email: '', full_name: '', password: '', role: 'preparador' });
-      alert('Usuario creado exitosamente!');
+      setFormData({ email: '', full_name: '', password: '', roles: [] });
+      setSuccessMessage('Usuario creado exitosamente!');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error creating user:', error);
       alert('Error al crear el usuario');
@@ -58,11 +103,12 @@ const Users: React.FC = () => {
 
   const handleEditUser = (user: User) => {
     setEditingUser(user);
+    const userRoles = user.role ? user.role.split(',') : [];
     setFormData({
       email: user.email,
       full_name: user.full_name,
-      password: '', // Dejar vacío para no mostrar la contraseña actual
-      role: user.role
+      password: '',
+      roles: userRoles
     });
     setShowForm(true);
   };
@@ -74,10 +120,11 @@ const Users: React.FC = () => {
     setLoading(true);
     
     try {
+      const roleString = formData.roles.join(',');
       const updates: any = {
         email: formData.email,
         full_name: formData.full_name,
-        role: formData.role
+        role: roleString
       };
       
       // Solo actualizar password si se ingresó una nueva
@@ -87,11 +134,12 @@ const Users: React.FC = () => {
       
       const updatedUser = await usersApi.updateUser(editingUser.id, updates);
       
-      setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
+setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
       setShowForm(false);
       setEditingUser(null);
-      setFormData({ email: '', full_name: '', password: '', role: 'preparador' });
-      alert('Usuario actualizado exitosamente!');
+      setFormData({ email: '', full_name: '', password: '', roles: [] });
+      setSuccessMessage('Usuario actualizado exitosamente!');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error updating user:', error);
       alert('Error al actualizar el usuario');
@@ -100,45 +148,64 @@ const Users: React.FC = () => {
     }
   };
 
-  const handleDeleteUser = async (id: string, email: string) => {
-    if (window.confirm(`¿Estás seguro de eliminar al usuario ${email}?`)) {
-      if (email === 'admin@sanse.com') {
-        alert('No se puede eliminar el usuario administrador principal');
-        return;
-      }
-      
-      setLoading(true);
-      
-      try {
-        await usersApi.deleteUser(id);
-        setUsers(users.filter(u => u.id !== id));
-        alert('Usuario eliminado exitosamente!');
-      } catch (error) {
-        console.error('Error deleting user:', error);
-        alert('Error al eliminar el usuario');
-      } finally {
-        setLoading(false);
-      }
+  const handleDeleteUser = (id: string, email: string) => {
+    if (email === 'admin@sanse.com') {
+      setSuccessMessage('No se puede eliminar el usuario administrador principal');
+      setShowSuccessModal(true);
+      return;
+    }
+    setUserToDelete({ id, email });
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    
+    setLoading(true);
+    setShowDeleteModal(false);
+    
+    try {
+      await usersApi.deleteUser(userToDelete.id);
+      setUsers(users.filter(u => u.id !== userToDelete.id));
+      setSuccessMessage('Usuario eliminado exitosamente!');
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      setSuccessMessage('Error al eliminar el usuario');
+      setShowSuccessModal(true);
+    } finally {
+      setLoading(false);
+      setUserToDelete(null);
     }
   };
 
   const resetForm = () => {
     setShowForm(false);
     setEditingUser(null);
-    setFormData({ email: '', full_name: '', password: '', role: 'preparador' });
+    setFormData({ email: '', full_name: '', password: '', roles: [] });
+  };
+
+  const toggleRole = (role: string) => {
+    setFormData(prev => ({
+      ...prev,
+      roles: prev.roles.includes(role)
+        ? prev.roles.filter(r => r !== role)
+        : [...prev.roles, role]
+    }));
   };
 
   if (loading && users.length === 0) {
     return <div className="container mx-auto p-6 text-center">Cargando usuarios...</div>;
   }
 
-  return (
+return (
     <div className="container mx-auto p-6">
+      <BackButton />
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <div>
+          <div>
           <h1 className="text-3xl font-bold text-sanse-blue">Gestión de Usuarios</h1>
-          <p className="text-gray-600">Administra los preparadores físicos del sistema</p>
+          <p className="text-gray-600">Administra los usuarios del sistema</p>
         </div>
         <button
           onClick={() => setShowForm(true)}
@@ -198,16 +265,21 @@ const Users: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Rol *</label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'preparador' })}
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  disabled={loading}
-                >
-                  <option value="preparador">Preparador Físico</option>
-                  <option value="admin">Administrador</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Roles *</label>
+                <div className="grid grid-cols-2 gap-2 border border-gray-300 rounded-md p-3 bg-gray-50">
+                  {AVAILABLE_ROLES.map(role => (
+                    <label key={role.value} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.roles.includes(role.value)}
+                        onChange={() => toggleRole(role.value)}
+                        className="w-4 h-4 text-sanse-blue rounded"
+                        disabled={loading}
+                      />
+                      <span className="text-sm">{role.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -263,14 +335,40 @@ const Users: React.FC = () => {
                     <div className="text-sm text-gray-500">{user.email}</div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    user.role === 'admin' 
-                      ? 'bg-purple-100 text-purple-800' 
-                      : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {user.role === 'admin' ? 'Administrador' : 'Preparador'}
-                  </span>
+                <td className="px-6 py-4">
+                  <div className="flex flex-wrap gap-1">
+                    {user.role && user.role.split(',').map(r => (
+                      <span key={r} className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        r === 'admin' 
+                          ? 'bg-purple-100 text-purple-800' 
+                          : r === 'admin_club'
+                          ? 'bg-indigo-100 text-indigo-800'
+                          : r === 'entrenador'
+                          ? 'bg-green-100 text-green-800'
+                          : r === 'preparador'
+                          ? 'bg-blue-100 text-blue-800'
+                          : r === 'coordinador'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : r === 'delegado'
+                          ? 'bg-pink-100 text-pink-800'
+                          : r === 'tesorero'
+                          ? 'bg-teal-100 text-teal-800'
+                          : r === 'jugador'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {r === 'admin' && 'Admin'}
+                        {r === 'admin_club' && 'Admin Club'}
+                        {r === 'entrenador' && 'Entrenador'}
+                        {r === 'preparador' && 'Prep. Físico'}
+                        {r === 'coordinador' && 'Coordinador'}
+                        {r === 'delegado' && 'Delegado'}
+                        {r === 'tesorero' && 'Tesorero'}
+                        {r === 'jugador' && 'Jugador'}
+                        {r === 'padre' && 'Padre/Tutor'}
+                      </span>
+                    ))}
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -285,21 +383,21 @@ const Users: React.FC = () => {
                   {new Date(user.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-2">
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleEditUser(user)}
-                      className="text-blue-600 hover:text-blue-900 disabled:opacity-50"
+                      className="bg-sanse-blue text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
                       disabled={loading}
                     >
-                      Editar
+                      ✏️
                     </button>
                     {user.email !== 'admin@sanse.com' && (
                       <button
                         onClick={() => handleDeleteUser(user.id, user.email)}
-                        className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                        className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm"
                         disabled={loading}
                       >
-                        Eliminar
+                        🗑️
                       </button>
                     )}
                   </div>
@@ -313,6 +411,56 @@ const Users: React.FC = () => {
       {users.length === 0 && !loading && (
         <div className="text-center p-8 text-gray-500">
           No hay usuarios registrados. Crea el primero.
+        </div>
+      )}
+
+      {/* Modal de éxito */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl">✓</span>
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">¡Éxito!</h3>
+            <p className="text-gray-600 mb-6">{successMessage}</p>
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium"
+            >
+              Aceptar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {showDeleteModal && userToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl">⚠️</span>
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Confirmar eliminación</h3>
+            <p className="text-gray-600 mb-6">¿Estás seguro de eliminar al usuario {userToDelete.email}?</p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={confirmDeleteUser}
+                className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 font-medium"
+                disabled={loading}
+              >
+                Eliminar
+              </button>
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setUserToDelete(null);
+                }}
+                className="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 font-medium"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

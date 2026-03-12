@@ -1,32 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usersApi } from '../lib/supabaseUsers';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPinSetup, setShowPinSetup] = useState(false);
+  const [needsPinSetup, setNeedsPinSetup] = useState(false);
+  const [step, setStep] = useState<'credentials' | 'pin'>('credentials');
+  const [loggedInUser, setLoggedInUser] = useState<any>(null);
+  const [pinOnlyMode, setPinOnlyMode] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    const usersWithPin = JSON.parse(localStorage.getItem('usersWithPin') || '[]');
+    
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+      if (usersWithPin.includes(savedEmail)) {
+        setStep('pin');
+        setPinOnlyMode(true);
+      }
+    }
+  }, []);
+
+  const handleSubmitCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // Buscar usuario en tu tabla custom de users
       const user = await usersApi.loginUser(email, password);
       
       if (user) {
-        // Login exitoso - guardar sesión en localStorage como antes
-        localStorage.setItem('user', JSON.stringify({
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          fullName: user.full_name
-        }));
+        setLoggedInUser(user);
         
-        // Recargar para que App.tsx detecte el cambio
-        window.location.href = '/';
+        if (!user.pin) {
+          setNeedsPinSetup(true);
+          setShowPinSetup(true);
+          setLoading(false);
+          return;
+        }
+        
+        if (rememberMe) {
+          localStorage.setItem('rememberedEmail', email);
+          const usersWithPin = JSON.parse(localStorage.getItem('usersWithPin') || '[]');
+          if (!usersWithPin.includes(email)) {
+            usersWithPin.push(email);
+            localStorage.setItem('usersWithPin', JSON.stringify(usersWithPin));
+          }
+        }
+        
+        setStep('pin');
+        setLoading(false);
       } else {
         setError('Credenciales incorrectas o usuario inactivo');
       }
@@ -36,6 +67,128 @@ const Login: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSetupPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    if (pin.length !== 6) {
+      setError('El PIN debe tener 6 dígitos');
+      setLoading(false);
+      return;
+    }
+
+    if (pin !== confirmPin) {
+      setError('Los PINs no coinciden');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const pinHash = simpleHash(pin);
+      await usersApi.updateUser(loggedInUser.id, { pin: pinHash });
+      
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', email);
+        const usersWithPin = JSON.parse(localStorage.getItem('usersWithPin') || '[]');
+        if (!usersWithPin.includes(email)) {
+          usersWithPin.push(email);
+          localStorage.setItem('usersWithPin', JSON.stringify(usersWithPin));
+        }
+      }
+      
+      localStorage.setItem('user', JSON.stringify({
+        id: loggedInUser.id,
+        email: loggedInUser.email,
+        role: loggedInUser.role,
+        fullName: loggedInUser.full_name
+      }));
+      
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error setting PIN:', error);
+      setError('Error al configurar el PIN');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    if (step === 'pin' && !loggedInUser) {
+      const user = await usersApi.loginWithPin(email, pin);
+      if (user) {
+        localStorage.setItem('user', JSON.stringify({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          fullName: user.full_name
+        }));
+        window.location.href = '/';
+      } else {
+        setError('PIN incorrecto');
+      }
+      setLoading(false);
+      return;
+    }
+
+    if (!loggedInUser) {
+      const user = await usersApi.loginUser(email, password);
+      if (user && user.pin === simpleHash(pin)) {
+        if (rememberMe) {
+          const usersWithPin = JSON.parse(localStorage.getItem('usersWithPin') || '[]');
+          if (!usersWithPin.includes(email)) {
+            usersWithPin.push(email);
+            localStorage.setItem('usersWithPin', JSON.stringify(usersWithPin));
+          }
+        }
+        localStorage.setItem('user', JSON.stringify({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          fullName: user.full_name
+        }));
+        window.location.href = '/';
+      } else {
+        setError('PIN incorrecto');
+      }
+    } else if (loggedInUser.pin === simpleHash(pin)) {
+      localStorage.setItem('user', JSON.stringify({
+        id: loggedInUser.id,
+        email: loggedInUser.email,
+        role: loggedInUser.role,
+        fullName: loggedInUser.full_name
+      }));
+      window.location.href = '/';
+    } else {
+      setError('PIN incorrecto');
+    }
+    setLoading(false);
+  };
+
+  const handleBack = () => {
+    setStep('credentials');
+    setShowPinSetup(false);
+    setNeedsPinSetup(false);
+    setPin('');
+    setConfirmPin('');
+    setLoggedInUser(null);
+    setPinOnlyMode(false);
+  };
+
+  const simpleHash = (str: string): string => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16);
   };
 
   return (
@@ -54,7 +207,7 @@ const Login: React.FC = () => {
               Sanse Complutense
             </h2>
             <p className="text-center text-gray-600">
-              Planificador de Entrenamientos
+              Hockey Club OS
             </p>
           </div>
         </div>
@@ -65,45 +218,153 @@ const Login: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue"
-              required
-              disabled={loading}
-              placeholder="tu@email.com"
-            />
-          </div>
+        {showPinSetup ? (
+          <form onSubmit={handleSetupPin}>
+            <div className="text-center mb-4">
+              <p className="text-lg font-semibold text-sanse-blue">Configura tu PIN</p>
+              <p className="text-sm text-gray-600">Crea un PIN de 6 dígitos para acceso rápido</p>
+            </div>
 
-          <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
-              Contraseña
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue"
-              required
-              disabled={loading}
-              placeholder="••••••••"
-            />
-          </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Ingresa tu PIN
+              </label>
+              <input
+                type="password"
+                maxLength={6}
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue text-center text-2xl tracking-widest"
+                required
+                disabled={loading}
+                placeholder="******"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-sanse-red text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition duration-200 disabled:opacity-50"
-          >
-            {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-          </button>
-        </form>
+            <div className="mb-6">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Confirma tu PIN
+              </label>
+              <input
+                type="password"
+                maxLength={6}
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue text-center text-2xl tracking-widest"
+                required
+                disabled={loading}
+                placeholder="******"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || pin.length !== 6 || confirmPin.length !== 6}
+              className="w-full bg-sanse-red text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition duration-200 disabled:opacity-50 mb-3"
+            >
+              {loading ? 'Guardando...' : 'Guardar PIN'}
+            </button>
+            
+            <button
+              type="button"
+              onClick={handleBack}
+              className="w-full bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 transition duration-200"
+            >
+              Atrás
+            </button>
+          </form>
+        ) : step === 'pin' ? (
+          <form onSubmit={handlePinSubmit}>
+            <div className="text-center mb-4">
+              <p className="text-lg font-semibold text-sanse-blue">Bienvenido</p>
+              <p className="text-sm text-gray-600">{email}</p>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Ingresa tu PIN
+              </label>
+              <input
+                type="password"
+                maxLength={6}
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue text-center text-2xl tracking-widest"
+                required
+                disabled={loading}
+                placeholder="******"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || pin.length !== 6}
+              className="w-full bg-sanse-red text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition duration-200 disabled:opacity-50 mb-3"
+            >
+              {loading ? 'Verificando...' : 'Ingresar'}
+            </button>
+            
+            <button
+              type="button"
+              onClick={handleBack}
+              className="w-full bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 transition duration-200"
+            >
+              Cambiar usuario
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmitCredentials}>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue"
+                required
+                disabled={loading}
+                placeholder="tu@email.com"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Contraseña
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sanse-blue"
+                required
+                disabled={loading}
+                placeholder="••••••••"
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="mr-2 h-4 w-4 text-sanse-blue"
+                />
+                <span className="text-sm text-gray-600">Recordar usuario</span>
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-sanse-red text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition duration-200 disabled:opacity-50"
+            >
+              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+            </button>
+          </form>
+        )}
 
       </div>
     </div>

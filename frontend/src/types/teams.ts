@@ -1,3 +1,15 @@
+export interface Club {
+  id: string;
+  name: string;
+  logo_url?: string;
+  primary_color?: string;
+  secondary_color?: string;
+  address?: string;
+  google_maps_url?: string;
+  website?: string;
+  created_at: string;
+}
+
 export interface Team {
   id: string;
   club_id: string;
@@ -6,6 +18,7 @@ export interface Team {
   category?: string;
   gender?: string;
   created_at: string;
+  club?: Club;
 }
 
 export interface Player {
@@ -13,10 +26,14 @@ export interface Player {
   club_id: string;
   full_name: string;
   birth_date?: string;
+  dorsal?: number;
+  gender?: string;
   is_minor: boolean;
   is_self_managed: boolean;
+  is_active?: boolean;
   parent_id?: string;
   created_at: string;
+  teams?: Team[];
 }
 
 export interface TeamPlayer {
@@ -30,6 +47,19 @@ export interface TeamPlayer {
   player?: Player;
 }
 
+export interface Training {
+  id: string;
+  name: string;
+  categories: string[];
+  exercises: any[];
+  totalTime: number;
+  observations: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  shareId: string;
+}
+
 export interface Event {
   id: string;
   team_id: string;
@@ -41,8 +71,10 @@ export interface Event {
   kit_color?: string;
   notes?: string;
   opponent?: string;
+  training_id?: string;
   created_at: string;
   team?: Team;
+  training?: Training;
 }
 
 export interface Convocation {
@@ -67,11 +99,13 @@ export interface CreateEventInput {
   type: 'match' | 'training' | 'meeting';
   title?: string;
   start_datetime: string;
+  convocation_time?: string | null;
   location?: string;
   location_link?: string;
   kit_color?: string;
   notes?: string;
   opponent?: string;
+  training_id?: string;
 }
 
 export interface CreateConvocationInput {

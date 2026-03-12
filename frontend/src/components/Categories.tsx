@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import BackButton from './BackButton';
 import { categoriesApi, Category } from '../lib/supabaseCategories';
 import { exercisesApi } from '../lib/supabaseExercises';
 
@@ -143,8 +144,9 @@ const Categories: React.FC = () => {
 
   if (loading) return <div className="text-center p-8">Cargando categorías...</div>;
 
-  return (
+return (
     <div className="container mx-auto p-6">
+      <BackButton to="/trainings" />
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>

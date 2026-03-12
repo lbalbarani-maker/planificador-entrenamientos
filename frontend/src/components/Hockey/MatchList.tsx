@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { HockeyMatch } from '../../types/hockey';
+import BackButton from '../BackButton';
 
 const MatchList: React.FC = () => {
   const navigate = useNavigate();
@@ -9,6 +10,8 @@ const MatchList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     loadMatches();
@@ -26,7 +29,7 @@ const MatchList: React.FC = () => {
   };
 
   const handleCreateMatch = () => {
-    navigate('/hockey/new');
+    navigate('/match/new');
   };
 
   const handleJoinMatch = async () => {
@@ -34,7 +37,7 @@ const MatchList: React.FC = () => {
     
     const match = await hockeyApi.getMatchByToken(joinCode.trim());
     if (match) {
-      navigate(`/hockey/${match.id}`);
+      navigate(`/match/${match.id}`);
     } else {
       alert('Partido no encontrado. Verifica el código.');
     }
@@ -47,7 +50,6 @@ const MatchList: React.FC = () => {
       try {
         await hockeyApi.deleteMatch(id);
         setMatches(matches.filter(m => m.id !== id));
-        alert('Partido eliminado');
       } catch (error) {
         console.error('Error deleting match:', error);
         alert('Error al eliminar el partido');
@@ -67,9 +69,11 @@ const MatchList: React.FC = () => {
   };
 
   const copyShareLink = (token: string) => {
-    const url = `${window.location.origin}/hockey/${token}/watch`;
+    const url = `${window.location.origin}/match/${token}/watch`;
     navigator.clipboard.writeText(url).then(() => {
-      alert('Enlace copiado al portapapeles');
+      setSuccessMessage('Enlace copiado al portapapeles');
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 2000);
     });
   };
 
@@ -82,39 +86,33 @@ const MatchList: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 p-6">
+    <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-4xl mx-auto">
+        <BackButton />
+        
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">🏑 Hockey Score</h1>
-            <p className="text-gray-300">Gestiona tus partidos en tiempo real</p>
+            <h1 className="text-3xl font-bold text-sanse-blue">🏑 Partidos</h1>
           </div>
         </div>
 
-        {/* Botones de acción */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {/* Botón de acción */}
+        <div className="mb-6">
           <button
             onClick={handleCreateMatch}
-            className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-6 rounded-xl text-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl text-lg transition-all flex items-center justify-center gap-2"
           >
-            🆕 Crear Nuevo Partido
-          </button>
-
-          <button
-            onClick={() => setShowJoinModal(true)}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-xl text-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2"
-          >
-            🔗 Unirse a Partido
+            + Nuevo Partido
           </button>
         </div>
 
         {/* Lista de partidos */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-          <h2 className="text-2xl font-bold text-white mb-6">Mis Partidos</h2>
+        <div className="bg-white rounded-2xl shadow-md p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-6">Mis Partidos</h2>
 
           {matches.length === 0 ? (
-            <div className="text-center py-8 text-gray-300">
+            <div className="text-center py-8 text-gray-500">
               <p className="text-lg mb-2">No hay partidos todavía</p>
               <p className="text-sm">Crea tu primer partido o únete a uno existente</p>
             </div>
@@ -123,28 +121,28 @@ const MatchList: React.FC = () => {
               {matches.map((match) => (
                 <div
                   key={match.id}
-                  className="bg-white/10 rounded-xl p-4 border border-white/10 hover:bg-white/20 transition-colors"
+                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <span
                           className="px-3 py-1 rounded-full text-sm font-bold"
-                          style={{ backgroundColor: match.team1_color + '40', color: match.team1_color }}
+                          style={{ backgroundColor: match.team1_color + '20', color: match.team1_color }}
                         >
                           {match.team1_name}
                         </span>
-                        <span className="text-white font-bold text-xl">vs</span>
+                        <span className="text-gray-800 font-bold text-xl">vs</span>
                         <span
                           className="px-3 py-1 rounded-full text-sm font-bold"
-                          style={{ backgroundColor: match.team2_color + '40', color: match.team2_color }}
+                          style={{ backgroundColor: match.team2_color + '20', color: match.team2_color }}
                         >
                           {match.team2_name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-300">
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
                         <span>{getStatusBadge(match.status)}</span>
-                        <span>
+                        <span className="font-bold text-sanse-blue">
                           {match.score_team1} - {match.score_team2}
                         </span>
                         <span>Cuarto: {match.quarter}/4</span>
@@ -155,7 +153,7 @@ const MatchList: React.FC = () => {
                     </div>
                     <div className="flex gap-2 ml-4">
                       <button
-                        onClick={() => navigate(`/hockey/${match.id}`)}
+                        onClick={() => navigate(`/match/${match.id}`)}
                         className="bg-sanse-blue text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm"
                       >
                         ⚙️ Admin
@@ -182,15 +180,15 @@ const MatchList: React.FC = () => {
 
         {/* Modal para unirse a partido */}
         {showJoinModal && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-[#071025] rounded-2xl p-6 max-w-md w-full border border-white/10">
-              <h3 className="text-xl font-bold text-white mb-4">Unirse a Partido</h3>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Unirse a Partido</h3>
               <input
                 type="text"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
                 placeholder="Ingresa el código o token del partido"
-                className="w-full p-3 rounded bg-white/10 text-white border border-white/20 mb-4"
+                className="w-full p-3 rounded-lg border border-gray-300 mb-4"
               />
               <div className="flex gap-3">
                 <button
@@ -201,11 +199,23 @@ const MatchList: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setShowJoinModal(false)}
-                  className="flex-1 bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700"
+                  className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600"
                 >
                   Cancelar
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Éxito */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-8 max-w-sm w-full text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-3xl">✅</span>
+              </div>
+              <p className="text-lg font-medium text-gray-800">{successMessage}</p>
             </div>
           </div>
         )}

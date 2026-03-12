@@ -1,20 +1,33 @@
 import { supabase } from './supabase';
 
+const simpleHash = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(16);
+};
+
 export interface User {
   id: string;
   email: string;
   full_name: string;
-  password: string;
-  role: 'admin' | 'preparador';
+  role: string;
   is_active: boolean;
   created_at: string;
+  club_id: string | null;
+  is_super_admin: boolean;
+  is_club_admin: boolean;
+  pin?: string;
+  password?: string;
 }
 
 export const usersApi = {
-  // Obtener todos los usuarios
   async getUsers(): Promise<User[]> {
     const { data, error } = await supabase
-      .from('users')
+      .from('profiles')
       .select('*')
       .order('created_at', { ascending: false });
     
@@ -25,11 +38,14 @@ export const usersApi = {
     return data || [];
   },
 
-  // Crear usuario
   async createUser(user: Omit<User, 'id' | 'created_at'>): Promise<User> {
+    const userWithHash = {
+      ...user,
+      password: user.password ? simpleHash(user.password) : simpleHash('default123')
+    };
     const { data, error } = await supabase
-      .from('users')
-      .insert([user])
+      .from('profiles')
+      .insert([userWithHash])
       .select()
       .single();
     
@@ -40,10 +56,9 @@ export const usersApi = {
     return data;
   },
 
-  // Actualizar usuario
   async updateUser(id: string, updates: Partial<User>): Promise<User> {
     const { data, error } = await supabase
-      .from('users')
+      .from('profiles')
       .update(updates)
       .eq('id', id)
       .select()
@@ -56,10 +71,9 @@ export const usersApi = {
     return data;
   },
 
-  // Eliminar usuario
   async deleteUser(id: string): Promise<void> {
     const { error } = await supabase
-      .from('users')
+      .from('profiles')
       .delete()
       .eq('id', id);
     
@@ -69,18 +83,38 @@ export const usersApi = {
     }
   },
 
-  // Buscar usuario por email y password (para login)
   async loginUser(email: string, password: string): Promise<User | null> {
+    const passwordHash = simpleHash(password);
     const { data, error } = await supabase
-      .from('users')
+      .from('profiles')
       .select('*')
       .eq('email', email)
-      .eq('password', password)
       .eq('is_active', true)
       .single();
     
-    if (error) {
+    if (error || !data) {
       console.error('Login error:', error);
+      return null;
+    }
+
+    if (data.password === passwordHash || data.password === password) {
+      return data;
+    }
+    return null;
+  },
+
+  async loginWithPin(email: string, pin: string): Promise<User | null> {
+    const pinHash = simpleHash(pin);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', email)
+      .eq('pin', pinHash)
+      .eq('is_active', true)
+      .single();
+    
+    if (error || !data) {
+      console.error('Login with PIN error:', error);
       return null;
     }
     return data;

@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { teamsApi, fieldsApi, opponentTeamsApi } from '../../lib/supabaseTeams';
+import { tournamentsApi } from '../../lib/supabaseTournaments';
 import { Team, TeamPlayer, Field, OpponentTeam } from '../../types/teams';
 import { HockeyPlayer } from '../../types/hockey';
+import { Season, Tournament, Matchday } from '../../types/tournaments';
 
 interface PlayerData {
   id: string;
@@ -64,6 +66,14 @@ const MatchSetup: React.FC = () => {
   const [location, setLocation] = useState('');
   const [locationLink, setLocationLink] = useState('');
 
+  // Torneos
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [matchdays, setMatchdays] = useState<Matchday[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState<string>('');
+  const [selectedTournament, setSelectedTournament] = useState<string>('');
+  const [selectedMatchday, setSelectedMatchday] = useState<string>('');
+
   const [sponsor, setSponsor] = useState({
     logo: '',
     name: '',
@@ -97,17 +107,55 @@ const MatchSetup: React.FC = () => {
     }
   }, [localTeam]);
 
+  useEffect(() => {
+    if (selectedSeason) {
+      loadTournaments(selectedSeason);
+    } else {
+      setTournaments([]);
+      setSelectedTournament('');
+    }
+  }, [selectedSeason]);
+
+  useEffect(() => {
+    if (selectedTournament) {
+      loadMatchdays(selectedTournament);
+    } else {
+      setMatchdays([]);
+      setSelectedMatchday('');
+    }
+  }, [selectedTournament]);
+
   const loadAll = async () => {
-    const [teamsData, fieldsData, opponentsData] = await Promise.all([
+    const [teamsData, fieldsData, opponentsData, seasonsData] = await Promise.all([
       teamsApi.getTeams(),
       fieldsApi.getFields(),
-      opponentTeamsApi.getOpponentTeams()
+      opponentTeamsApi.getOpponentTeams(),
+      tournamentsApi.getSeasons()
     ]);
     setTeams(teamsData);
     setFields(fieldsData);
     setOpponents(opponentsData);
+    setSeasons(seasonsData);
     if (teamsData.length > 0) {
       setLocalTeam(teamsData[0].id);
+    }
+  };
+
+  const loadTournaments = async (seasonId: string) => {
+    try {
+      const data = await tournamentsApi.getTournaments(seasonId);
+      setTournaments(data);
+    } catch (error) {
+      console.error('Error loading tournaments:', error);
+    }
+  };
+
+  const loadMatchdays = async (tournamentId: string) => {
+    try {
+      const data = await tournamentsApi.getMatchdays(tournamentId);
+      setMatchdays(data);
+    } catch (error) {
+      console.error('Error loading matchdays:', error);
     }
   };
 
@@ -257,11 +305,6 @@ const MatchSetup: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!adminPin.trim()) {
-      alert('Introduce un PIN de administrador');
-      return;
-    }
-
     if (!team1.name.trim() || !team2.name.trim()) {
       alert('Introduce el nombre de ambos equipos');
       return;
@@ -312,8 +355,9 @@ const MatchSetup: React.FC = () => {
       });
 
       await hockeyApi.setMatchPlayers(match.id, playersToSave);
+      console.log('Players saved:', playersToSave);
 
-      navigate(`/hockey/${match.id}`);
+      navigate(`/match/${match.id}`);
     } catch (error) {
       console.error('Error creating match:', error);
       alert('Error al crear el partido');
@@ -331,7 +375,7 @@ const MatchSetup: React.FC = () => {
             <p className="text-gray-300">Define equipos, jugadores y configuración</p>
           </div>
           <button
-            onClick={() => navigate('/hockey')}
+            onClick={() => navigate('/match')}
             className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
           >
             ← Volver
@@ -388,6 +432,70 @@ const MatchSetup: React.FC = () => {
               </select>
             </div>
           </div>
+        </div>
+
+        {/* Selección de Torneo */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 mb-6">
+          <h3 className="text-xl font-bold text-white mb-4">🏆 Torneo (opcional)</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Temporada */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">📅 Temporada</label>
+              <select
+                value={selectedSeason}
+                onChange={(e) => {
+                  setSelectedSeason(e.target.value);
+                  setSelectedTournament('');
+                  setSelectedMatchday('');
+                }}
+                className="w-full p-3 rounded bg-white/10 text-white border border-white/20"
+              >
+                <option value="">Seleccionar...</option>
+                {seasons.map(season => (
+                  <option key={season.id} value={season.id}>{season.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Torneo */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">🏆 Torneo</label>
+              <select
+                value={selectedTournament}
+                onChange={(e) => {
+                  setSelectedTournament(e.target.value);
+                  setSelectedMatchday('');
+                }}
+                className="w-full p-3 rounded bg-white/10 text-white border border-white/20"
+                disabled={!selectedSeason}
+              >
+                <option value="">Seleccionar...</option>
+                {tournaments.map(tournament => (
+                  <option key={tournament.id} value={tournament.id}>{tournament.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Jornada */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">📊 Jornada</label>
+              <select
+                value={selectedMatchday}
+                onChange={(e) => setSelectedMatchday(e.target.value)}
+                className="w-full p-3 rounded bg-white/10 text-white border border-white/20"
+                disabled={!selectedTournament}
+              >
+                <option value="">Seleccionar...</option>
+                {matchdays.map(matchday => (
+                  <option key={matchday.id} value={matchday.id}>
+                    {matchday.name || `Jornada ${matchday.round_number}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">Vincula el partido a un torneo para que compture en la clasificación</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

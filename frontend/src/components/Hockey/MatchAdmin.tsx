@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
+import { convocationApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
 import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave } from '../../types/hockey';
 
@@ -23,6 +24,11 @@ const MatchAdmin: React.FC = () => {
   const [customPlayerNumber, setCustomPlayerNumber] = useState('');
   
   const [displayTime, setDisplayTime] = useState(0);
+  const [pinAttempts, setPinAttempts] = useState(0);
+  
+  const [showManagePlayersModal, setShowManagePlayersModal] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<'team1' | 'team2' | null>(null);
+  const [editingPlayers, setEditingPlayers] = useState<HockeyPlayer[]>([]);
 
   useEffect(() => {
     if (id) loadMatch();
@@ -305,6 +311,87 @@ const MatchAdmin: React.FC = () => {
     return players.filter(p => p.team === team);
   };
 
+  const openManagePlayers = async (team: 'team1' | 'team2') => {
+    const teamPlayers = getTeamPlayers(team);
+    
+    // Si es el equipo 1 (nuestro club) y hay un event_id, intentar cargar convocatorias
+    if (team === 'team1' && match?.event_id) {
+      try {
+        const convocations = await convocationApi.getConvocation(match.event_id);
+        const acceptedPlayers = convocations.filter(c => c.status === 'accepted');
+        
+        if (acceptedPlayers.length > 0) {
+          const playersFromConvocation: HockeyPlayer[] = acceptedPlayers.map(c => ({
+            id: Date.now().toString() + Math.random().toString(36).substr(2),
+            match_id: id!,
+            team: 'team1',
+            player_name: c.player?.full_name || 'Jugador',
+            dorsal: c.player?.dorsal?.toString() || '',
+            is_goalkeeper: false,
+          }));
+          
+          await hockeyApi.setMatchPlayers(id!, playersFromConvocation);
+          await loadMatch();
+          alert(`Se han añadido ${playersFromConvocation.length} jugadores de la convocatoria`);
+          return;
+        } else {
+          alert('No hay jugadores aceptados en la convocatoria. Añádelos manualmente.');
+        }
+      } catch (error) {
+        console.error('Error loading convocation:', error);
+        alert('Error al cargar la convocatoria. Añade los jugadores manualmente.');
+      }
+    }
+    
+    // Para equipo 2 o si falló lo anterior, abrir modal manual
+    setEditingTeam(team);
+    setEditingPlayers(teamPlayers);
+    setShowManagePlayersModal(true);
+  };
+
+  const handleSavePlayers = async () => {
+    if (!editingTeam || !id) return;
+    try {
+      const playersToSave = editingPlayers.map(p => ({
+        ...p,
+        match_id: id,
+        team: editingTeam,
+      }));
+      await hockeyApi.setMatchPlayers(id, playersToSave);
+      await loadMatch();
+      setShowManagePlayersModal(false);
+      setEditingTeam(null);
+      setEditingPlayers([]);
+      alert('Jugadores guardados');
+    } catch (error) {
+      console.error('Error saving players:', error);
+      alert('Error al guardar jugadores');
+    }
+  };
+
+  const addNewPlayer = () => {
+    const newPlayer: HockeyPlayer = {
+      id: Date.now().toString(),
+      match_id: id!,
+      team: editingTeam!,
+      player_name: '',
+      dorsal: '',
+      position: '',
+      is_goalkeeper: false,
+    };
+    setEditingPlayers([...editingPlayers, newPlayer]);
+  };
+
+  const updateEditingPlayer = (playerId: string, field: string, value: string) => {
+    setEditingPlayers(editingPlayers.map(p => 
+      p.id === playerId ? { ...p, [field]: value } : p
+    ));
+  };
+
+  const removeEditingPlayer = (playerId: string) => {
+    setEditingPlayers(editingPlayers.filter(p => p.id !== playerId));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -389,7 +476,7 @@ const MatchAdmin: React.FC = () => {
                 {match.team1_logo_url ? (
                   <img src={match.team1_logo_url} alt="logo" className="w-16 h-16 object-contain" />
                 ) : (
-                  '🏠'
+                  <span className="text-2xl font-bold text-white">{match.team1_name.substring(0, 2).toUpperCase()}</span>
                 )}
               </div>
               <h3 className="text-xl font-bold text-white">{match.team1_name}</h3>
@@ -450,7 +537,7 @@ const MatchAdmin: React.FC = () => {
                 {match.team2_logo_url ? (
                   <img src={match.team2_logo_url} alt="logo" className="w-16 h-16 object-contain" />
                 ) : (
-                  '✈️'
+                  <span className="text-2xl font-bold text-white">{match.team2_name.substring(0, 2).toUpperCase()}</span>
                 )}
               </div>
               <h3 className="text-xl font-bold text-white">{match.team2_name}</h3>
@@ -488,6 +575,32 @@ const MatchAdmin: React.FC = () => {
                 Q{q}
               </button>
             ))}
+          </div>
+
+          {/* Botones para gestionar jugadores por equipo */}
+          <div className="mt-6 p-4 bg-yellow-600/20 rounded-xl border border-yellow-600">
+            <p className="text-yellow-300 text-center mb-3">Gestión de jugadores</p>
+            <div className="flex gap-2 justify-center flex-wrap">
+              {getTeamPlayers('team1').length === 0 && (
+                <button
+                  onClick={() => openManagePlayers('team1')}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-bold"
+                >
+                  👥 Añadir {match.team1_name}
+                </button>
+              )}
+              {getTeamPlayers('team2').length === 0 && (
+                <button
+                  onClick={() => openManagePlayers('team2')}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-bold"
+                >
+                  👥 Añadir {match.team2_name}
+                </button>
+              )}
+              {getTeamPlayers('team1').length > 0 && getTeamPlayers('team2').length > 0 && (
+                <p className="text-green-400 text-center w-full">✓ Todos los equipos tienen jugadores</p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -530,7 +643,7 @@ const MatchAdmin: React.FC = () => {
 
         {/* Historial de goles */}
         <div className="bg-white/10 rounded-xl p-4 border border-white/10">
-          <h3 className="text-white font-bold mb-3">⚽ Historial de Goles ({goals.length})</h3>
+          <h3 className="text-white font-bold mb-3">🏑 Historial de Goles ({goals.length})</h3>
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {goals.length === 0 ? (
               <p className="text-gray-400 text-sm">No hay goles todavía</p>
@@ -569,7 +682,7 @@ const MatchAdmin: React.FC = () => {
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
             <div className="bg-[#071025] rounded-2xl p-6 max-w-md w-full border border-white/10">
               <h3 className="text-xl font-bold text-white mb-4">
-                ⚽ Registrar Gol - {goalTeam === 'team1' ? match.team1_name : match.team2_name}
+                🏑 Registrar Gol - {goalTeam === 'team1' ? match.team1_name : match.team2_name}
               </h3>
               
               <div className="mb-4">
@@ -618,6 +731,71 @@ const MatchAdmin: React.FC = () => {
                   className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold"
                 >
                   Confirmar Gol
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal para gestionar jugadores */}
+        {showManagePlayersModal && editingTeam && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#071025] rounded-2xl p-6 max-w-lg w-full border border-white/10 max-h-[80vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-white mb-4">
+                👥 Jugadores - {editingTeam === 'team1' ? match.team1_name : match.team2_name}
+              </h3>
+
+              <div className="space-y-3 mb-4">
+                {editingPlayers.length === 0 ? (
+                  <p className="text-gray-400 text-center py-4">No hay jugadores. Añade uno.</p>
+                ) : (
+                  editingPlayers.map((player, index) => (
+                    <div key={player.id} className="flex gap-2 items-center bg-white/5 p-2 rounded-lg">
+                      <span className="text-white w-6">{index + 1}.</span>
+                      <input
+                        type="text"
+                        value={player.player_name}
+                        onChange={(e) => updateEditingPlayer(player.id, 'player_name', e.target.value)}
+                        placeholder="Nombre del jugador"
+                        className="flex-1 p-2 rounded bg-white/10 text-white border border-white/20 text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={player.dorsal || ''}
+                        onChange={(e) => updateEditingPlayer(player.id, 'dorsal', e.target.value)}
+                        placeholder="Dorsal"
+                        className="w-16 p-2 rounded bg-white/10 text-white border border-white/20 text-sm text-center"
+                      />
+                      <button
+                        onClick={() => removeEditingPlayer(player.id)}
+                        className="text-red-400 hover:text-red-600 p-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <button
+                onClick={addNewPlayer}
+                className="w-full mb-4 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg"
+              >
+                + Añadir Jugador
+              </button>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowManagePlayersModal(false); setEditingTeam(null); setEditingPlayers([]); }}
+                  className="flex-1 bg-gray-600 text-white py-2 rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSavePlayers}
+                  className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold"
+                >
+                  Guardar
                 </button>
               </div>
             </div>

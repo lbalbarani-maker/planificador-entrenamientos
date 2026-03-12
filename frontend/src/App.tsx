@@ -4,6 +4,8 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Trainings from './components/Trainings';
 import Exercises from './components/Exercises';
+import Categories from './components/Categories';
+import Users from './components/Users';
 import PublicTraining from './components/PublicTraining';
 import MatchList from './components/Hockey/MatchList';
 import MatchSetup from './components/Hockey/MatchSetup';
@@ -11,7 +13,21 @@ import MatchAdmin from './components/Hockey/MatchAdmin';
 import MatchSpectator from './components/Hockey/MatchSpectator';
 import TeamsList from './components/Teams/TeamsList';
 import TeamDetail from './components/Teams/TeamDetail';
+import ClubsList from './components/Clubs/ClubsList';
+import LocationsList from './components/Locations/LocationsList';
+import PlayersList from './components/Players/PlayersList';
+import LotteriesList from './components/Lotteries/LotteriesList';
+import LotteryDetail from './components/Lotteries/LotteryDetail';
+import LotterySales from './components/Lotteries/LotterySales';
+import LotteryPublic from './components/Lotteries/LotteryPublic';
+import TournamentsList from './components/Tournaments/TournamentsList';
+import TournamentDetail from './components/Tournaments/TournamentDetail';
 import './App.css';
+
+const hasRole = (roleString: string | undefined, role: string): boolean => {
+  if (!roleString) return false;
+  return roleString.split(',').includes(role);
+};
 
 function App() {
   const [user, setUser] = useState<any>(null);
@@ -63,25 +79,47 @@ function App() {
       <Routes>
         {/* Rutas públicas */}
         <Route path="/training/:shareId" element={<PublicTraining />} />
-        <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
+        <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" replace />} />
         
         {/* Rutas protegidas */}
-        <Route path="/" element={user ? <Dashboard /> : <Navigate to="/login" replace />} />
+        <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" replace />} />
+        <Route path="/match" element={user ? <MatchList /> : <Navigate to="/login" replace />} />
+        <Route path="/match/new" element={user ? <MatchSetup /> : <Navigate to="/login" replace />} />
+        <Route path="/match/:id" element={user ? <MatchAdmin /> : <Navigate to="/login" replace />} />
+        <Route path="/match/:token/watch" element={<MatchSpectator />} />
         <Route path="/trainings" element={user ? <Trainings /> : <Navigate to="/login" replace />} />
         <Route path="/exercises" element={user ? <Exercises /> : <Navigate to="/login" replace />} />
-        
-        {/* Rutas de Hockey */}
-        <Route path="/hockey" element={user ? <MatchList /> : <Navigate to="/login" replace />} />
-        <Route path="/hockey/new" element={user ? <MatchSetup /> : <Navigate to="/login" replace />} />
-        <Route path="/hockey/:id" element={user ? <MatchAdmin /> : <Navigate to="/login" replace />} />
-        <Route path="/hockey/:token/watch" element={<MatchSpectator />} />
+        <Route path="/users" element={user && hasRole(user.role, 'admin') ? <Users /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/categories" element={user && hasRole(user.role, 'admin') ? <Categories /> : <Navigate to="/dashboard" replace />} />
         
         {/* Rutas de Equipos */}
         <Route path="/teams" element={user ? <TeamsList /> : <Navigate to="/login" replace />} />
         <Route path="/teams/:id" element={user ? <TeamDetail /> : <Navigate to="/login" replace />} />
         
+        {/* Rutas de Jugadores */}
+        <Route path="/players" element={user ? <PlayersList /> : <Navigate to="/login" replace />} />
+        
+        {/* Rutas de Clubes */}
+        <Route path="/clubs" element={user && hasRole(user.role, 'admin') ? <ClubsList /> : <Navigate to="/dashboard" replace />} />
+        
+        {/* Rutas de Pistas */}
+        <Route path="/locations" element={user ? <LocationsList /> : <Navigate to="/login" replace />} />
+        
+        {/* Rutas de Loterías */}
+        <Route path="/lotteries" element={user ? <LotteriesList /> : <Navigate to="/login" replace />} />
+        <Route path="/lotteries/:id" element={user ? <LotteryDetail /> : <Navigate to="/login" replace />} />
+        <Route path="/lotteries/:id/sales" element={user ? <LotterySales /> : <Navigate to="/login" replace />} />
+        
+        {/* Rutas de Torneos */}
+        <Route path="/tournaments" element={user ? <TournamentsList /> : <Navigate to="/login" replace />} />
+        <Route path="/tournaments/:id" element={user ? <TournamentDetail /> : <Navigate to="/login" replace />} />
+        
+        {/* Ruta pública de lotería para jugadores */}
+        <Route path="/lottery/:lotteryId/player/:playerId" element={<LotteryPublic />} />
+        <Route path="/lottery/:lotteryId/buyer/:buyerId" element={<LotteryPublic />} />
+        
         {/* Ruta por defecto */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>
   );

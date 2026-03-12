@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import YouTube from 'react-youtube';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { supabase } from '../../lib/supabase';
 import { HockeyMatch, HockeyGoal, HockeySave } from '../../types/hockey';
@@ -15,6 +16,9 @@ const MatchSpectator: React.FC = () => {
   const [displayTime, setDisplayTime] = useState(0);
   const [visibleEvent, setVisibleEvent] = useState<'goal' | 'save' | null>(null);
   const [eventTeam, setEventTeam] = useState<'team1' | 'team2' | null>(null);
+  const [isMuted, setIsMuted] = useState(true);
+  const [volume, setVolume] = useState(30);
+  const playerRef = useRef<any>(null);
 
   useEffect(() => {
     if (token) loadMatch();
@@ -115,7 +119,7 @@ const MatchSpectator: React.FC = () => {
       const matchData = await hockeyApi.getMatchByToken(token!);
       if (!matchData) {
         alert('Partido no encontrado');
-        navigate('/hockey');
+        navigate('/match');
         return;
       }
       
@@ -142,6 +146,54 @@ const MatchSpectator: React.FC = () => {
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
+  const getYouTubeVideoId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const toggleMute = () => {
+    if (playerRef.current) {
+      if (isMuted) {
+        playerRef.current.setVolume(volume);
+        playerRef.current.unMute();
+      } else {
+        playerRef.current.mute();
+      }
+      setIsMuted(!isMuted);
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    if (playerRef.current) {
+      playerRef.current.setVolume(newVolume);
+      if (newVolume > 0 && isMuted) {
+        playerRef.current.unMute();
+        setIsMuted(false);
+      }
+      setVolume(newVolume);
+    }
+  };
+
+  const handlePlayerReady = (event: any) => {
+    playerRef.current = event.target;
+    event.target.mute();
+    event.target.playVideo();
+  };
+
+  const youtubeOpts = {
+    playerVars: {
+      autoplay: 1,
+      mute: 1,
+      controls: 0,
+      modestbranding: 1,
+      rel: 0,
+      showinfo: 0,
+      disablekb: 1,
+      fs: 0,
+    },
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 flex items-center justify-center">
@@ -163,16 +215,50 @@ const MatchSpectator: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-4">
       {/* YouTube Embed */}
-      {match.youtube_url && (
-        <div className="max-w-4xl mx-auto mb-6">
-          <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-xl">
-            <iframe
+      {match.youtube_url && getYouTubeVideoId(match.youtube_url) && (
+        <div className="max-w-4xl mx-auto mb-6 relative">
+          <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-xl bg-black">
+            <YouTube
+              videoId={getYouTubeVideoId(match.youtube_url)!}
+              opts={youtubeOpts}
+              onReady={handlePlayerReady}
               className="absolute top-0 left-0 w-full h-full"
-              src={match.youtube_url.replace('watch?v=', 'embed/')}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
+              iframeClassName="w-full h-full"
+            />
+            <div 
+              className="absolute inset-0 z-10 cursor-default"
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ pointerEvents: 'all' }}
             />
           </div>
+          <button
+            onClick={toggleMute}
+            className="absolute bottom-4 right-4 z-20 bg-black/70 text-white p-3 rounded-full hover:bg-black/90 transition-colors"
+          >
+            {isMuted ? (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            )}
+          </button>
+          {!isMuted && (
+            <div className="absolute bottom-4 left-4 z-20 bg-black/70 text-white px-3 py-2 rounded-full flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={volume}
+                onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
+                className="w-20 h-1 accent-sanse-blue"
+              />
+              <span className="text-xs">{volume}%</span>
+            </div>
+          )}
         </div>
       )}
 

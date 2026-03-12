@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Training, 
+import { useNavigate } from 'react-router-dom';
+import BackButton from './BackButton';
+import {
   Exercise, 
   Category, 
+  Training,
   TrainingExercise,
   getTrainings, 
   getExercises, 
@@ -13,6 +15,7 @@ import {
 } from '../lib/supabasetrainings';
 
 const Trainings: React.FC = () => {
+  const navigate = useNavigate();
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -522,20 +525,35 @@ const Trainings: React.FC = () => {
 
   if (loading) return <div className="text-center p-8">Cargando entrenamientos...</div>;
 
-  return (
+return (
     <div className="container mx-auto p-6">
+      <BackButton />
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold text-sanse-blue">Gestión de Entrenamientos</h1>
           <p className="text-gray-600">Crea y edita sesiones completas con el carrito de ejercicios</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-sanse-red text-white px-4 py-2 rounded-md hover:bg-red-700"
-        >
-          + Nuevo Entrenamiento
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate('/exercises')}
+            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+          >
+            💪 Ejercicios
+          </button>
+          <button
+            onClick={() => navigate('/categories')}
+            className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
+          >
+            📁 Categorías
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-sanse-red text-white px-4 py-2 rounded-md hover:bg-red-700"
+          >
+            + Nuevo Entrenamiento
+          </button>
+        </div>
       </div>
 
       {/* Estadísticas */}
