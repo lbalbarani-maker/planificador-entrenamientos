@@ -9,5 +9,7 @@
       "path": "/api/keep-alive",
       "schedule": "0 12 * * *"
     }
-  ]
+  ],
+  "buildCommand": "CI=false npm run build",
+  "installCommand": "npm install"
 }
