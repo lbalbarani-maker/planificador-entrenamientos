@@ -138,18 +138,48 @@ export const teamsApi = {
 
   async getTeamPlayers(teamId: string): Promise<TeamPlayer[]> {
     console.log('getTeamPlayers - teamId:', teamId);
+    
+    const { data: allPlayers, error: allError } = await supabase
+      .from('team_players')
+      .select('*');
+    
+    console.log('All team_players count:', allPlayers?.length);
+    
     const { data, error } = await supabase
       .from('team_players')
-      .select('*, player:players(*)')
-      .eq('team_id', teamId)
-      .order('shirt_number', { ascending: true });
+      .select('*, player:players(id, full_name, dorsal)')
+      .eq('team_id', teamId);
 
-    console.log('getTeamPlayers - result:', { data, error });
+    console.log('getTeamPlayers - result:', { data, error, count: data?.length });
     
     if (error) {
       console.error('getTeamPlayers - error:', error);
       throw error;
     }
+    return data || [];
+  },
+
+  async getAvailablePlayers(clubId: string): Promise<Player[]> {
+    const { data: assignedPlayers } = await supabase
+      .from('team_players')
+      .select('player_id');
+    
+    const assignedIds = (assignedPlayers || []).map(p => p.player_id);
+    
+    let query = supabase
+      .from('players')
+      .select('*')
+      .eq('club_id', clubId)
+      .eq('is_active', true)
+      .order('full_name');
+    
+    if (assignedIds.length > 0) {
+      query = query.not('id', 'in', `(${assignedIds.join(',')})`);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) throw error;
     return data || [];
   },
 
@@ -198,7 +228,7 @@ export const eventsApi = {
   async getEvents(teamId?: string): Promise<Event[]> {
     let query = supabase
       .from('events')
-      .select('*, team:teams(*), training:trainings(*)')
+      .select('*, team:teams(*)')
       .order('start_datetime', { ascending: true });
 
     if (teamId) {
@@ -278,7 +308,7 @@ export const eventsApi = {
       .from('events')
       .update({ training_id: trainingId })
       .eq('id', eventId)
-      .select('*, team:teams(*), training:trainings(*)')
+      .select('*, team:teams(*)')
       .single();
 
     if (error) throw error;

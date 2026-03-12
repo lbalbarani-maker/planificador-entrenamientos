@@ -14,12 +14,14 @@ const TeamDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showPlayerForm, setShowPlayerForm] = useState(false);
   const [showConvocationForm, setShowConvocationForm] = useState(false);
+  const [showAddExistingPlayerModal, setShowAddExistingPlayerModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<string>('');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerNumber, setNewPlayerNumber] = useState('');
   const [newPlayerPosition, setNewPlayerPosition] = useState<'Jugadora' | 'Portera'>('Jugadora');
   const [editingPlayer, setEditingPlayer] = useState<{ id: string; name: string; number: string; position: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'players' | 'events'>('players');
+  const [addingPlayers, setAddingPlayers] = useState<string[]>([]);
 
   useEffect(() => {
     if (id) loadData();
@@ -37,6 +39,12 @@ const TeamDetail: React.FC = () => {
       setTeam(currentTeam || null);
       setTeamPlayers(playersData);
       setEvents(eventsData);
+
+      const clubId = currentTeam?.club_id || (JSON.parse(localStorage.getItem('user') || '{}')?.club_id);
+      if (clubId) {
+        const available = await teamsApi.getAvailablePlayers(clubId);
+        setAvailablePlayers(available);
+      }
 
       const conv: Record<string, Convocation[]> = {};
       for (const event of eventsData) {
@@ -72,6 +80,31 @@ const TeamDetail: React.FC = () => {
       console.error('Error adding player:', error);
       alert('Error al añadir jugador');
     }
+  };
+
+  const handleAddExistingPlayers = async () => {
+    if (addingPlayers.length === 0) return;
+    
+    try {
+      for (const playerId of addingPlayers) {
+        await teamsApi.addPlayerToTeam(id!, playerId);
+      }
+      await loadData();
+      setShowAddExistingPlayerModal(false);
+      setAddingPlayers([]);
+      alert('Jugadores añadidos correctamente');
+    } catch (error) {
+      console.error('Error adding players:', error);
+      alert('Error al añadir jugadores');
+    }
+  };
+
+  const togglePlayerSelection = (playerId: string) => {
+    setAddingPlayers(prev => 
+      prev.includes(playerId) 
+        ? prev.filter(id => id !== playerId)
+        : [...prev, playerId]
+    );
   };
 
   const handleUpdatePlayer = async (e: React.FormEvent) => {
@@ -181,12 +214,20 @@ const TeamDetail: React.FC = () => {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800">Jugadores del Equipo</h2>
-              <button
-                onClick={() => setShowPlayerForm(true)}
-                className="bg-sanse-blue text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-              >
-                + Añadir Jugador
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowAddExistingPlayerModal(true)}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                >
+                  + Añadir Jugadores Existentes
+                </button>
+                <button
+                  onClick={() => setShowPlayerForm(true)}
+                  className="bg-sanse-blue text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  + Crear Jugador
+                </button>
+              </div>
             </div>
 
             {teamPlayers.length === 0 ? (
@@ -421,6 +462,59 @@ const TeamDetail: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal para añadir jugadores existentes */}
+        {showAddExistingPlayerModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <h3 className="text-xl font-bold mb-4">Añadir Jugadores Existentes</h3>
+              <p className="text-gray-600 mb-4">
+                Selecciona los jugadores que pertenecen al club pero no están en ningún equipo:
+              </p>
+              
+              {availablePlayers.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">
+                  No hay jugadores disponibles. Todos los jugadores del club ya están asignados a un equipo.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+                    {availablePlayers.map(player => (
+                      <label 
+                        key={player.id}
+                        className={`flex items-center p-3 rounded-lg border cursor-pointer ${addingPlayers.includes(player.id) ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'}`}
+                      >
+                        <input 
+                          type="checkbox" 
+                          checked={addingPlayers.includes(player.id)}
+                          onChange={() => togglePlayerSelection(player.id)}
+                          className="w-5 h-5 mr-3"
+                        />
+                        <span className="font-medium">{player.full_name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddExistingPlayers}
+                      disabled={addingPlayers.length === 0}
+                      className={`flex-1 py-2 rounded-lg ${addingPlayers.length > 0 ? 'bg-sanse-blue text-white hover:bg-blue-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                    >
+                      Añadir ({addingPlayers.length})
+                    </button>
+                    <button
+                      onClick={() => { setShowAddExistingPlayerModal(false); setAddingPlayers([]); }}
+                      className="bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
