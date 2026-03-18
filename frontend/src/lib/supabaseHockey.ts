@@ -7,6 +7,7 @@ import {
   HockeyMatchWithDetails,
   CreateMatchInput,
   UpdateMatchInput,
+  EditMatchInput,
   AddGoalInput,
   AddSaveInput,
 } from '../types/hockey';
@@ -61,6 +62,7 @@ export const hockeyApi = {
           score_team1: 0,
           score_team2: 0,
           running: false,
+          event_id: input.event_id || null,
         },
       ])
       .select()
@@ -158,6 +160,68 @@ export const hockeyApi = {
     return data;
   },
 
+  async updateMatchFull(
+    id: string, 
+    matchInput: Partial<EditMatchInput>, 
+    players: HockeyPlayer[]
+  ): Promise<HockeyMatch> {
+    // Solo actualizar campos que existen en la tabla hockey_matches
+    const updateData: any = {
+      updated_at: new Date().toISOString(),
+    };
+    
+    // Solo incluir campos que existen en la tabla
+    if (matchInput.quarter_duration !== undefined) updateData.quarter_duration = matchInput.quarter_duration;
+    if (matchInput.youtube_url !== undefined) updateData.youtube_url = matchInput.youtube_url || null;
+    if (matchInput.sponsor_logo_url !== undefined) updateData.sponsor_logo_url = matchInput.sponsor_logo_url || null;
+    if (matchInput.sponsor_name !== undefined) updateData.sponsor_name = matchInput.sponsor_name || null;
+    if (matchInput.sponsor_text !== undefined) updateData.sponsor_text = matchInput.sponsor_text || null;
+    
+    const { data, error } = await supabase
+      .from('hockey_matches')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating match:', error);
+      throw error;
+    }
+
+    if (players.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('hockey_players')
+        .delete()
+        .eq('match_id', id);
+
+      if (deleteError) {
+        console.error('Error deleting old players:', deleteError);
+        throw deleteError;
+      }
+
+      const playersToInsert = players.map(p => ({
+        match_id: id,
+        team: p.team,
+        player_name: p.player_name,
+        dorsal: p.dorsal || null,
+        position: p.position || null,
+        is_goalkeeper: p.is_goalkeeper,
+      }));
+
+      const { error: insertError } = await supabase
+        .from('hockey_players')
+        .insert(playersToInsert);
+
+      if (insertError) {
+        console.error('Error inserting players:', insertError);
+        throw insertError;
+      }
+    }
+
+    return data;
+  },
+
   async deleteMatch(id: string): Promise<void> {
     const { error } = await supabase
       .from('hockey_matches')
@@ -167,6 +231,17 @@ export const hockeyApi = {
     if (error) {
       console.error('Error deleting match:', error);
       throw error;
+    }
+  },
+
+  async deleteMatchByEventId(eventId: string): Promise<void> {
+    const { error } = await supabase
+      .from('hockey_matches')
+      .delete()
+      .eq('event_id', eventId);
+
+    if (error) {
+      console.error('Error deleting match by event_id:', error);
     }
   },
 
@@ -286,6 +361,18 @@ export const hockeyApi = {
     }
   },
 
+  async removeSave(saveId: string): Promise<void> {
+    const { error } = await supabase
+      .from('hockey_saves')
+      .delete()
+      .eq('id', saveId);
+
+    if (error) {
+      console.error('Error removing save:', error);
+      throw error;
+    }
+  },
+
   async getMatchGoals(matchId: string): Promise<HockeyGoal[]> {
     const { data, error } = await supabase
       .from('hockey_goals')
@@ -308,8 +395,11 @@ export const hockeyApi = {
         {
           match_id: matchId,
           team: input.team,
+          player_id: input.player_id || null,
           player_name: input.player_name || null,
+          dorsal: input.dorsal || null,
           quarter: input.quarter,
+          elapsed_in_quarter: input.elapsed_in_quarter || null,
           match_minute: input.match_minute,
         },
       ])

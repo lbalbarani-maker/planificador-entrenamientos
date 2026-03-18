@@ -148,14 +148,14 @@ const Dashboard: React.FC = () => {
   const navItems = [
     { id: 'home', label: 'Inicio', icon: '🏠', path: '/dashboard' },
     { id: 'hockey', label: 'Partidos', icon: '🏑', path: '/match' },
-    { id: 'teams', label: 'Equipos', icon: '🏅', path: '/teams' },
-    { id: 'players', label: 'Jugadores/as', icon: '👤', path: '/players' },
-    { id: 'lotteries', label: 'Loterías', icon: '🎫', path: '/lotteries' },
-    { id: 'trainings', label: 'Entrenos Físicos', icon: '🏋️', path: '/trainings' },
-    { id: 'locations', label: 'Pistas', icon: '📍', path: '/locations' },
+    { id: 'teams', label: 'Equipos', icon: '🏅', path: '/teams', roles: ['admin', 'admin_club', 'entrenador', 'coordinador', 'delegado'] },
+    { id: 'players', label: 'Jugadores/as', icon: '👤', path: '/players', roles: ['admin', 'admin_club', 'entrenador', 'coordinador'] },
+    { id: 'lotteries', label: 'Loterías', icon: '🎫', path: '/lotteries', roles: ['admin', 'admin_club', 'coordinador', 'tesorero'] },
+    { id: 'trainings', label: 'Entrenos Físicos', icon: '🏋️', path: '/trainings', roles: ['admin', 'admin_club', 'entrenador', 'preparador'] },
+    { id: 'locations', label: 'Pistas', icon: '📍', path: '/locations', roles: ['admin', 'admin_club', 'coordinador'] },
     ...(hasRole(user.role, 'admin') ? [{ id: 'clubs', label: 'Clubes', icon: '🏢', path: '/clubs' }] : []),
     ...(hasRole(user.role, 'admin') ? [{ id: 'users', label: 'Usuarios', icon: '👥', path: '/users' }] : []),
-  ];
+  ].filter(item => !item.roles || item.roles.some((role: string) => hasRole(user.role, role)));
 
   const handleRoleChange = (role: string) => {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -268,16 +268,18 @@ const Dashboard: React.FC = () => {
 
           {/* Botones flotantes - siempre visibles */}
           <div className="p-4 border-t bg-white sticky bottom-0">
-            <button
-              onClick={() => setShowRoleModal(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors mb-2"
-            >
-              <span>🎭</span>
-              <div className="flex-1 text-left">
-                <span className="font-medium block">Cambiar Rol</span>
-                <span className="text-xs text-gray-500">Ver como: {getCurrentRoleLabel()}</span>
-              </div>
-            </button>
+            {hasRole(user.role, 'admin') && (
+              <button
+                onClick={() => setShowRoleModal(true)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors mb-2"
+              >
+                <span>🎭</span>
+                <div className="flex-1 text-left">
+                  <span className="font-medium block">Cambiar Rol</span>
+                  <span className="text-xs text-gray-500">Ver como: {getCurrentRoleLabel()}</span>
+                </div>
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors"

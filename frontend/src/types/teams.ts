@@ -28,6 +28,7 @@ export interface Player {
   birth_date?: string;
   dorsal?: number;
   gender?: string;
+  position?: string;
   is_minor: boolean;
   is_self_managed: boolean;
   is_active?: boolean;
@@ -72,6 +73,7 @@ export interface Event {
   notes?: string;
   opponent?: string;
   training_id?: string;
+  final_convocation?: string;
   created_at: string;
   team?: Team;
   training?: Training;
@@ -83,6 +85,8 @@ export interface Convocation {
   player_id: string;
   status: 'pending' | 'accepted' | 'declined';
   response_note?: string;
+  dorsal?: number;
+  player_name?: string;
   created_at: string;
   updated_at: string;
   player?: Player;
@@ -111,6 +115,19 @@ export interface CreateEventInput {
 export interface CreateConvocationInput {
   event_id: string;
   player_id: string;
+}
+
+export interface Location {
+  id: string;
+  name: string;
+  address?: string;
+  google_maps_url?: string;
+  surface?: string;
+  has_parking?: boolean;
+  has_locker_rooms?: boolean;
+  notes?: string;
+  is_active?: boolean;
+  created_at: string;
 }
 
 export interface Field {

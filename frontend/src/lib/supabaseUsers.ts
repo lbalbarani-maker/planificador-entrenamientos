@@ -24,6 +24,14 @@ export interface User {
   password?: string;
 }
 
+export interface UserRelation {
+  id: string;
+  user_id: string;
+  relation_type: 'player' | 'team';
+  relation_id: string;
+  created_at: string;
+}
+
 export const usersApi = {
   async getUsers(): Promise<User[]> {
     const { data, error } = await supabase
@@ -118,5 +126,116 @@ export const usersApi = {
       return null;
     }
     return data;
+  },
+
+  // === RELACIONES ===
+  async getUserRelations(userId: string): Promise<UserRelation[]> {
+    const { data, error } = await supabase
+      .from('user_relations')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error fetching user relations:', error);
+      throw error;
+    }
+    return data || [];
+  },
+
+  async linkUserToPlayer(userId: string, playerId: string): Promise<UserRelation> {
+    const { data, error } = await supabase
+      .from('user_relations')
+      .insert([{
+        user_id: userId,
+        relation_type: 'player',
+        relation_id: playerId
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error linking user to player:', error);
+      throw error;
+    }
+    return data;
+  },
+
+  async linkUserToTeam(userId: string, teamId: string): Promise<UserRelation> {
+    const { data, error } = await supabase
+      .from('user_relations')
+      .insert([{
+        user_id: userId,
+        relation_type: 'team',
+        relation_id: teamId
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error linking user to team:', error);
+      throw error;
+    }
+    return data;
+  },
+
+  async unlinkRelation(relationId: string): Promise<void> {
+    const { error } = await supabase
+      .from('user_relations')
+      .delete()
+      .eq('id', relationId);
+
+    if (error) {
+      console.error('Error unlinking relation:', error);
+      throw error;
+    }
+  },
+
+  async updateUserRelations(userId: string, playerIds: string[], teamIds: string[]): Promise<void> {
+    // Eliminar relaciones existentes
+    const { error: deleteError } = await supabase
+      .from('user_relations')
+      .delete()
+      .eq('user_id', userId);
+
+    if (deleteError) {
+      console.error('Error deleting old relations:', deleteError);
+      throw deleteError;
+    }
+
+    // Crear nuevas relaciones de jugadores
+    if (playerIds.length > 0) {
+      const playerRelations = playerIds.map(playerId => ({
+        user_id: userId,
+        relation_type: 'player' as const,
+        relation_id: playerId
+      }));
+
+      const { error: playerError } = await supabase
+        .from('user_relations')
+        .insert(playerRelations);
+
+      if (playerError) {
+        console.error('Error creating player relations:', playerError);
+        throw playerError;
+      }
+    }
+
+    // Crear nuevas relaciones de equipos
+    if (teamIds.length > 0) {
+      const teamRelations = teamIds.map(teamId => ({
+        user_id: userId,
+        relation_type: 'team' as const,
+        relation_id: teamId
+      }));
+
+      const { error: teamError } = await supabase
+        .from('user_relations')
+        .insert(teamRelations);
+
+      if (teamError) {
+        console.error('Error creating team relations:', teamError);
+        throw teamError;
+      }
+    }
   }
 };

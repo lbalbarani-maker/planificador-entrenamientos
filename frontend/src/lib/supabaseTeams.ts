@@ -12,6 +12,7 @@ import {
   Field,
   OpponentTeam,
   Training,
+  Location,
 } from '../types/teams';
 
 export const trainingsApi = {
@@ -53,7 +54,7 @@ export const teamsApi = {
     
     const { data, error } = await supabase
       .from('teams')
-      .select('*, club:clubs(id, name, primary_color, secondary_color)')
+      .select('*, club:clubs(id, name, logo_url, primary_color, secondary_color)')
       .order('created_at', { ascending: false });
 
     console.log('getTeams - query result:', { data, error });
@@ -147,7 +148,7 @@ export const teamsApi = {
     
     const { data, error } = await supabase
       .from('team_players')
-      .select('*, player:players(id, full_name, dorsal)')
+      .select('*, player:players(id, full_name, dorsal, position)')
       .eq('team_id', teamId);
 
     console.log('getTeamPlayers - result:', { data, error, count: data?.length });
@@ -183,7 +184,7 @@ export const teamsApi = {
     return data || [];
   },
 
-  async addPlayerToTeam(teamId: string, playerId: string, shirtNumber?: number, position?: string): Promise<TeamPlayer> {
+  async addPlayerToTeam(teamId: string, playerId: string, shirtNumber?: number): Promise<TeamPlayer> {
     const { data, error } = await supabase
       .from('team_players')
       .insert([
@@ -191,7 +192,6 @@ export const teamsApi = {
           team_id: teamId,
           player_id: playerId,
           shirt_number: shirtNumber,
-          position: position,
           is_active: true,
         },
       ])
@@ -228,7 +228,7 @@ export const eventsApi = {
   async getEvents(teamId?: string): Promise<Event[]> {
     let query = supabase
       .from('events')
-      .select('*, team:teams(*)')
+      .select('*, team:teams(*, club:clubs(*))')
       .order('start_datetime', { ascending: true });
 
     if (teamId) {
@@ -241,12 +241,26 @@ export const eventsApi = {
     return data || [];
   },
 
+  async getEvent(eventId: string): Promise<Event | null> {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*, team:teams(*, club:clubs(*))')
+      .eq('id', eventId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching event:', error);
+      return null;
+    }
+    return data;
+  },
+
   async getUpcomingEvents(limit: number = 10): Promise<Event[]> {
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from('events')
-      .select('*, team:teams(*)')
+      .select('*, team:teams(*, club:clubs(*))')
       .gte('start_datetime', sevenDaysAgo)
       .order('start_datetime', { ascending: true })
       .limit(limit);
@@ -258,7 +272,7 @@ export const eventsApi = {
   async getAllEvents(): Promise<Event[]> {
     const { data, error } = await supabase
       .from('events')
-      .select('*, team:teams(*)')
+      .select('*, team:teams(*, club:clubs(*))')
       .order('start_datetime', { ascending: true });
 
     if (error) throw error;
@@ -336,19 +350,31 @@ export const convocationApi = {
     if (playerIds.length > 0) {
       const { data: players } = await supabase
         .from('players')
-        .select('id, full_name')
+        .select('id, full_name, dorsal, position')
         .in('id', playerIds);
       
       if (players) {
         players.forEach(p => {
-          playersMap[p.id] = { name: p.full_name };
+          playersMap[p.id] = { 
+            full_name: p.full_name, 
+            dorsal: p.dorsal,
+            position: p.position || 'Jugador'
+          };
         });
       }
     }
     
     return data.map(c => ({
       ...c,
-      player: playersMap[c.player_id] || null
+      player: playersMap[c.player_id] ? { 
+        id: c.player_id, 
+        full_name: playersMap[c.player_id].full_name, 
+        dorsal: playersMap[c.player_id].dorsal,
+        position: playersMap[c.player_id].position,
+        club_id: '',
+        is_minor: false,
+        is_self_managed: false
+      } : null
     }));
   },
 
@@ -542,5 +568,21 @@ export const clubsApi = {
       .eq('id', id);
 
     if (error) throw error;
+  },
+};
+
+export const locationsApi = {
+  async getLocations(): Promise<Location[]> {
+    const { data, error } = await supabase
+      .from('locations')
+      .select('*')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching locations:', error);
+      return [];
+    }
+    return data || [];
   },
 };

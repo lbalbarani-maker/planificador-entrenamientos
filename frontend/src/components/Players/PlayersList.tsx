@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { teamsApi, trainingsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
 import { Team, Player, TeamPlayer, Training } from '../../types/teams';
+import { usersApi } from '../../lib/supabaseUsers';
 import BackButton from '../BackButton';
 // @ts-ignore
 import * as XLSX from 'xlsx';
@@ -17,6 +18,8 @@ interface PlayerWithTeams extends Player {
   parent2_phone?: string;
   parent2_email?: string;
   parent2_is_active?: boolean;
+  user_id?: string;
+  player_email?: string;
 }
 
 interface Parent {
@@ -47,6 +50,7 @@ const PlayersList: React.FC = () => {
     birth_date: '',
     dorsal: '',
     gender: 'otro',
+    position: 'Jugador',
     is_active: true,
     club_id: '',
     primary_team_id: '',
@@ -55,7 +59,8 @@ const PlayersList: React.FC = () => {
     parent1_email: '',
     parent2_name: '',
     parent2_phone: '',
-    parent2_email: ''
+    parent2_email: '',
+    player_email: ''
   });
   const [dorsalWarning, setDorsalWarning] = useState<{ exists: boolean; player?: any; type?: 'same' | 'different' } | null>(null);
   const [showDorsalModal, setShowDorsalModal] = useState(false);
@@ -67,13 +72,14 @@ const PlayersList: React.FC = () => {
     try {
       setLoading(true);
       
-      const [playersData, teamsData, teamPlayersData, parentsData, clubsData, profilesData] = await Promise.all([
+      const [playersData, teamsData, teamPlayersData, parentsData, clubsData, profilesData, userRelationsData] = await Promise.all([
         supabase.from('players').select('*').order('full_name', { ascending: true }),
         teamsApi.getTeams(),
         supabase.from('team_players').select('*'),
         supabase.from('parents').select('*'),
         supabase.from('clubs').select('*'),
-        supabase.from('profiles').select('id, email, is_active')
+        supabase.from('profiles').select('id, email, is_active'),
+        supabase.from('user_relations').select('*').eq('relation_type', 'player')
       ]);
 
       const playersList = playersData.data || [];
@@ -82,6 +88,7 @@ const PlayersList: React.FC = () => {
       const parentsList = parentsData.data || [];
       const clubsList = clubsData.data || [];
       const profilesList = profilesData.data || [];
+      const userRelationsList = userRelationsData.data || [];
       setClubs(clubsList);
 
       const clubsMap: Record<string, any> = {};
@@ -89,6 +96,15 @@ const PlayersList: React.FC = () => {
 
       const profilesMap: Record<string, any> = {};
       profilesList.forEach((p: any) => { profilesMap[p.email?.toLowerCase()] = p; });
+
+      // Map user_id to player_id through user_relations
+      const playerToUserMap: Record<string, { userId: string; email: string }> = {};
+      userRelationsList.forEach((ur: any) => {
+        const user = profilesMap[ur.user_id] || profilesList.find((p: any) => p.id === ur.user_id);
+        if (user) {
+          playerToUserMap[ur.relation_id] = { userId: ur.user_id, email: user.email };
+        }
+      });
 
       const playersWithTeams: PlayerWithTeams[] = playersList.map(player => {
         const playerTeamIds = teamPlayersList
@@ -120,6 +136,8 @@ const PlayersList: React.FC = () => {
         return {
           ...player,
           teams: playerTeams,
+          user_id: playerToUserMap[player.id]?.userId,
+          player_email: playerToUserMap[player.id]?.email || '',
           parent1_name: parent1?.full_name || '',
           parent1_phone: parent1?.phone || '',
           parent1_email: parent1?.email || '',
@@ -484,6 +502,7 @@ const PlayersList: React.FC = () => {
       birth_date: player.birth_date || '',
       dorsal: player.dorsal?.toString() || '',
       gender: player.gender || 'otro',
+      position: player.position || 'Jugador',
       is_active: player.is_active !== false,
       club_id: player.club_id || '',
       primary_team_id: primaryTeamId,
@@ -492,7 +511,8 @@ const PlayersList: React.FC = () => {
       parent1_email: player.parent1_email || '',
       parent2_name: player.parent2_name || '',
       parent2_phone: player.parent2_phone || '',
-      parent2_email: player.parent2_email || ''
+      parent2_email: player.parent2_email || '',
+      player_email: player.player_email || ''
     });
     setSelectedTeams(player.teams?.map(t => t.id) || []);
     setDorsalWarning(null);
@@ -505,6 +525,7 @@ const PlayersList: React.FC = () => {
       const dorsalValue = formData.dorsal ? parseInt(formData.dorsal) : null;
       const primaryTeamId = formData.primary_team_id || selectedTeams[0] || null;
       let playerId = editingPlayer?.id;
+      let createdUserId: string | null = null;
       
       if (editingPlayer) {
         // Editar jugador existente
@@ -515,6 +536,7 @@ const PlayersList: React.FC = () => {
             birth_date: birthDateValue,
             dorsal: dorsalValue,
             gender: formData.gender,
+            position: formData.position,
             is_active: formData.is_active,
             club_id: formData.club_id || null
           })
@@ -530,6 +552,7 @@ const PlayersList: React.FC = () => {
             birth_date: birthDateValue,
             dorsal: dorsalValue,
             gender: formData.gender,
+            position: formData.position,
             is_active: formData.is_active,
             club_id: formData.club_id || null,
             is_minor: false,
@@ -540,6 +563,46 @@ const PlayersList: React.FC = () => {
         
         if (error) throw error;
         playerId = newPlayer.id;
+        
+        // Crear usuario automáticamente si se proporciona email
+        if (formData.player_email && formData.player_email.trim() !== '') {
+          try {
+            // Verificar si ya existe un usuario con ese email
+            const { data: existingUser } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('email', formData.player_email.trim().toLowerCase())
+              .single();
+            
+            if (existingUser) {
+              // Si ya existe, solo vincularlo
+              createdUserId = existingUser.id;
+              await supabase.from('user_relations').insert({
+                user_id: existingUser.id,
+                relation_type: 'player',
+                relation_id: newPlayer.id
+              });
+            } else {
+              // Crear nuevo usuario
+              const newUser = await usersApi.createUser({
+                email: formData.player_email.trim().toLowerCase(),
+                full_name: formData.full_name,
+                password: 'default123',
+                role: 'jugador',
+                is_active: true,
+                club_id: formData.club_id || null,
+                is_super_admin: false,
+                is_club_admin: false
+              });
+              createdUserId = newUser.id;
+              
+              // Vincular usuario con jugador
+              await usersApi.linkUserToPlayer(newUser.id, newPlayer.id);
+            }
+          } catch (userError) {
+            console.error('Error creating/linking user:', userError);
+          }
+        }
         
         // Asignar a equipos seleccionados
         for (const teamId of selectedTeams) {
@@ -681,6 +744,7 @@ const PlayersList: React.FC = () => {
                 birth_date: '',
                 dorsal: '',
                 gender: 'otro',
+                position: 'Jugador',
                 is_active: true,
                 club_id: defaultClub?.id || clubs[0]?.id || '',
                 primary_team_id: '',
@@ -689,7 +753,8 @@ const PlayersList: React.FC = () => {
                 parent1_email: '',
                 parent2_name: '',
                 parent2_phone: '',
-                parent2_email: ''
+                parent2_email: '',
+                player_email: ''
               });
               setSelectedTeams([]);
               setDorsalWarning(null);
@@ -772,7 +837,9 @@ const PlayersList: React.FC = () => {
                 {filteredPlayers.map(player => (
                   <tr key={player.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{player.full_name}</div>
+                      <div className="font-medium text-gray-900">
+                        {player.position === 'Portero' || player.position === 'Portera' ? '🥅 ' : ''}{player.full_name}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {player.dorsal ? (() => {
@@ -982,8 +1049,31 @@ const PlayersList: React.FC = () => {
                         <option value="femenino">Femenino</option>
                       </select>
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Posición</label>
+                      <select
+                        value={formData.position}
+                        onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                        className="w-full p-2 border border-gray-300 rounded-lg"
+                      >
+                        <option value="Jugador">{formData.gender === 'femenino' ? 'Jugadora' : 'Jugador'}</option>
+                        <option value="Portero">{formData.gender === 'femenino' ? '🥅 Portera' : '🥅 Portero'}</option>
+                      </select>
+                    </div>
                   </div>
                   
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <label className="block text-sm font-medium text-blue-800 mb-1">📧 Email del Jugador (opcional)</label>
+                    <p className="text-xs text-blue-600 mb-2">Si se proporciona, se creará un usuario automáticamente vinculado al jugador</p>
+                    <input
+                      type="email"
+                      value={formData.player_email}
+                      onChange={(e) => setFormData({ ...formData, player_email: e.target.value })}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                      placeholder="jugador@email.com"
+                    />
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -1165,6 +1255,11 @@ const PlayersList: React.FC = () => {
                   {viewingPlayer.birth_date && (
                     <p className="text-gray-500 mt-1">
                       🎂 {new Date(viewingPlayer.birth_date).toLocaleDateString('es-ES')}
+                    </p>
+                  )}
+                  {viewingPlayer.position && (
+                    <p className="text-gray-600 mt-1 font-medium">
+                      {viewingPlayer.position === 'Portero' || viewingPlayer.position === 'Portera' ? '🥅 ' : ''}{viewingPlayer.position}
                     </p>
                   )}
                 </div>

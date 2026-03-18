@@ -1,9 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import BackButton from './BackButton';
 import { usersApi, User } from '../lib/supabaseUsers';
+import { supabase } from '../lib/supabase';
+import { Team, Player } from '../types/teams';
+
+interface SimplePlayer {
+  id: string;
+  full_name: string;
+  is_active?: boolean;
+}
+
+interface SimpleTeam {
+  id: string;
+  name: string;
+}
 
 const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [players, setPlayers] = useState<SimplePlayer[]>([]);
+  const [teams, setTeams] = useState<SimpleTeam[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -14,7 +29,9 @@ const Users: React.FC = () => {
     email: '',
     full_name: '',
     password: '',
-    roles: [] as string[]
+    roles: [] as string[],
+    playerIds: [] as string[],
+    teamIds: [] as string[]
   });
   
   const getRoleLabels = (roleString: string): string => {
@@ -61,14 +78,29 @@ const Users: React.FC = () => {
       setUsers(usersData);
     } catch (error) {
       console.error('Error loading users:', error);
-      alert('Error al cargar los usuarios');
+      setSuccessMessage('Error al cargar los usuarios');
+      setShowSuccessModal(true);
     } finally {
       setLoading(false);
     }
   };
 
+  // Cargar jugadores y equipos
+  const loadOptions = async () => {
+    try {
+      const { data: playersData } = await supabase.from('players').select('id, full_name, is_active').order('full_name');
+      const { data: teamsData } = await supabase.from('teams').select('id, name').order('name');
+      
+      setPlayers(playersData || []);
+      setTeams(teamsData || []);
+    } catch (error) {
+      console.error('Error loading options:', error);
+    }
+  };
+
   useEffect(() => {
     loadUsers();
+    loadOptions();
   }, []);
 
 const handleCreateUser = async (e: React.FormEvent) => {
@@ -88,32 +120,53 @@ const handleCreateUser = async (e: React.FormEvent) => {
         is_club_admin: false
       });
       
-setUsers([...users, newUser]);
+      // Guardar relaciones si hay jugador o equipo seleccionado
+      if (formData.playerIds.length > 0 || formData.teamIds.length > 0) {
+        await usersApi.updateUserRelations(newUser.id, formData.playerIds, formData.teamIds);
+      }
+      
+      setUsers([...users, newUser]);
       setShowForm(false);
-      setFormData({ email: '', full_name: '', password: '', roles: [] });
+      setFormData({ email: '', full_name: '', password: '', roles: [], playerIds: [], teamIds: [] });
       setSuccessMessage('Usuario creado exitosamente!');
       setShowSuccessModal(true);
     } catch (error) {
       console.error('Error creating user:', error);
-      alert('Error al crear el usuario');
+      setSuccessMessage('Error al crear el usuario');
+      setShowSuccessModal(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEditUser = (user: User) => {
+const handleEditUser = async (user: User) => {
     setEditingUser(user);
     const userRoles = user.role ? user.role.split(',') : [];
+    
+    // Cargar relaciones existentes
+    let playerIds: string[] = [];
+    let teamIds: string[] = [];
+    
+    try {
+      const relations = await usersApi.getUserRelations(user.id);
+      playerIds = relations.filter(r => r.relation_type === 'player').map(r => r.relation_id);
+      teamIds = relations.filter(r => r.relation_type === 'team').map(r => r.relation_id);
+    } catch (error) {
+      console.error('Error loading user relations:', error);
+    }
+    
     setFormData({
       email: user.email,
       full_name: user.full_name,
       password: '',
-      roles: userRoles
+      roles: userRoles,
+      playerIds,
+      teamIds
     });
     setShowForm(true);
   };
 
-  const handleUpdateUser = async (e: React.FormEvent) => {
+const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
     
@@ -134,15 +187,19 @@ setUsers([...users, newUser]);
       
       const updatedUser = await usersApi.updateUser(editingUser.id, updates);
       
-setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
+      // Actualizar relaciones
+      await usersApi.updateUserRelations(editingUser.id, formData.playerIds, formData.teamIds);
+      
+      setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
       setShowForm(false);
       setEditingUser(null);
-      setFormData({ email: '', full_name: '', password: '', roles: [] });
+      setFormData({ email: '', full_name: '', password: '', roles: [], playerIds: [], teamIds: [] });
       setSuccessMessage('Usuario actualizado exitosamente!');
       setShowSuccessModal(true);
     } catch (error) {
       console.error('Error updating user:', error);
-      alert('Error al actualizar el usuario');
+      setSuccessMessage('Error al actualizar el usuario');
+      setShowSuccessModal(true);
     } finally {
       setLoading(false);
     }
@@ -179,10 +236,10 @@ setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
     }
   };
 
-  const resetForm = () => {
+const resetForm = () => {
     setShowForm(false);
     setEditingUser(null);
-    setFormData({ email: '', full_name: '', password: '', roles: [] });
+    setFormData({ email: '', full_name: '', password: '', roles: [], playerIds: [], teamIds: [] });
   };
 
   const toggleRole = (role: string) => {
@@ -248,7 +305,7 @@ return (
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
                   Contraseña {!editingUser && '*'}
@@ -282,6 +339,76 @@ return (
                 </div>
               </div>
             </div>
+
+            {/* Selector de Jugadores (si tiene rol padre o jugador) */}
+            {(formData.roles.includes('padre') || formData.roles.includes('jugador')) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {formData.roles.includes('jugador') ? 'Jugador *' : 'Seleccionar Jugadores (hijos/as) *'}
+                </label>
+                <div className="border border-gray-300 rounded-md p-3 bg-gray-50 max-h-40 overflow-y-auto">
+                  {players.filter(p => p.is_active !== false).map(player => (
+                    <label key={player.id} className="flex items-center gap-2 cursor-pointer py-1">
+                      <input
+                        type={formData.roles.includes('jugador') ? 'radio' : 'checkbox'}
+                        name="playerSelect"
+                        checked={formData.roles.includes('jugador') 
+                          ? formData.playerIds.includes(player.id)
+                          : formData.playerIds.includes(player.id)
+                        }
+                        onChange={(e) => {
+                          if (formData.roles.includes('jugador')) {
+                            setFormData({ ...formData, playerIds: [player.id] });
+                          } else {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, playerIds: [...formData.playerIds, player.id] });
+                            } else {
+                              setFormData({ ...formData, playerIds: formData.playerIds.filter(id => id !== player.id) });
+                            }
+                          }
+                        }}
+                        className="w-4 h-4 text-sanse-blue rounded"
+                        disabled={loading}
+                      />
+                      <span className="text-sm">{player.full_name}</span>
+                    </label>
+                  ))}
+                  {players.filter(p => p.is_active !== false).length === 0 && (
+                    <p className="text-gray-500 text-sm">No hay jugadores disponibles</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Selector de Equipos (si tiene rol entrenador o delegado) */}
+            {(formData.roles.includes('entrenador') || formData.roles.includes('delegado')) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Equipos que gestiona *</label>
+                <div className="border border-gray-300 rounded-md p-3 bg-gray-50 max-h-40 overflow-y-auto">
+                  {teams.map(team => (
+                    <label key={team.id} className="flex items-center gap-2 cursor-pointer py-1">
+                      <input
+                        type="checkbox"
+                        checked={formData.teamIds.includes(team.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({ ...formData, teamIds: [...formData.teamIds, team.id] });
+                          } else {
+                            setFormData({ ...formData, teamIds: formData.teamIds.filter(id => id !== team.id) });
+                          }
+                        }}
+                        className="w-4 h-4 text-sanse-blue rounded"
+                        disabled={loading}
+                      />
+                      <span className="text-sm">{team.name}</span>
+                    </label>
+                  ))}
+                  {teams.length === 0 && (
+                    <p className="text-gray-500 text-sm">No hay equipos disponibles</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-2">
               <button

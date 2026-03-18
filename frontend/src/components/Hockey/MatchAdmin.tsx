@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
-import { convocationApi } from '../../lib/supabaseTeams';
+import { convocationApi, clubsApi, eventsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
 import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave } from '../../types/hockey';
 
@@ -30,9 +30,67 @@ const MatchAdmin: React.FC = () => {
   const [editingTeam, setEditingTeam] = useState<'team1' | 'team2' | null>(null);
   const [editingPlayers, setEditingPlayers] = useState<HockeyPlayer[]>([]);
 
+  const [team1Logo, setTeam1Logo] = useState<string>('');
+  const [team2Logo, setTeam2Logo] = useState<string>('');
+  const [convocationPlayers, setConvocationPlayers] = useState<{ id: string; name: string; dorsal?: string }[]>([]);
+  const [finalConvocation, setFinalConvocation] = useState<string[]>([]);
+  const [goalkeepers, setGoalkeepers] = useState<{ id: string; name: string; dorsal?: string }[]>([]);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [selectedGoalkeeper, setSelectedGoalkeeper] = useState<string>('');
+  const [customGoalkeeperName, setCustomGoalkeeperName] = useState('');
+  const [customGoalkeeperNumber, setCustomGoalkeeperNumber] = useState('');
+
   useEffect(() => {
     if (id) loadMatch();
   }, [id]);
+
+  // Avance automático de cuarto cuando el tiempo llega a 0
+  useEffect(() => {
+    if (!match || !isAdmin) return;
+    if (!match.running) return;
+    if (displayTime > 0) return;
+
+    // El tiempo llegó a 0
+    const handleQuarterEnd = async () => {
+      try {
+        if (match.quarter >= 4) {
+          // Último cuarto finalizado, cambiar estado a finished
+          await hockeyApi.updateMatch(match.id, {
+            running: false,
+            status: 'finished',
+          });
+          setMatch(prev => prev ? { 
+            ...prev, 
+            running: false,
+            status: 'finished'
+          } : null);
+        } else {
+          // Avanzar al siguiente cuarto
+          const nextQuarter = match.quarter + 1;
+          await hockeyApi.updateMatch(match.id, {
+            quarter: nextQuarter,
+            remaining_time: match.quarter_duration,
+            running: false,
+            start_time: null,
+          });
+          setMatch(prev => prev ? { 
+            ...prev, 
+            quarter: nextQuarter, 
+            remaining_time: match.quarter_duration, 
+            running: false, 
+            start_time: null 
+          } : null);
+          setDisplayTime(match.quarter_duration);
+        }
+      } catch (error) {
+        console.error('Error ending quarter:', error);
+      }
+    };
+
+    // Pequeño delay para evitar múltiples llamadas
+    const timer = setTimeout(handleQuarterEnd, 500);
+    return () => clearTimeout(timer);
+  }, [displayTime, match?.running, match?.quarter, match?.quarter_duration, isAdmin]);
 
   useEffect(() => {
     if (!match) return;
@@ -119,12 +177,46 @@ const MatchAdmin: React.FC = () => {
       const matchData = await hockeyApi.getMatch(id!);
       if (!matchData) {
         alert('Partido no encontrado');
-        navigate('/hockey');
+        navigate('/match');
         return;
       }
       
       setMatch(matchData);
       setDisplayTime(matchData.remaining_time);
+
+      // Cargar logos de equipos/clubes
+      let logo1 = matchData.team1_logo_url || '';
+      let logo2 = matchData.team2_logo_url || '';
+      
+      const clubsData = await clubsApi.getClubs();
+      
+      // Logo equipo 1
+      if (!logo1) {
+        const club1 = clubsData.find(c => c.name === matchData.team1_name);
+        if (club1?.logo_url) logo1 = club1.logo_url;
+      }
+      
+      // Logo equipo 2 (rival)
+      if (!logo2) {
+        const club2 = clubsData.find(c => c.name === matchData.team2_name);
+        if (club2?.logo_url) logo2 = club2.logo_url;
+      }
+      
+      // Si hay evento, obtener logo desde el club del equipo
+      if (matchData.event_id && !logo1) {
+        const eventData = await eventsApi.getEvent(matchData.event_id);
+        if (eventData?.team?.club?.logo_url) {
+          logo1 = eventData.team.club.logo_url;
+        }
+        // Obtener la convocatoria final del evento
+        if (eventData?.final_convocation) {
+          const finalConv = JSON.parse(eventData.final_convocation);
+          setFinalConvocation(finalConv);
+        }
+      }
+      
+      setTeam1Logo(logo1);
+      setTeam2Logo(logo2);
 
       const [playersData, goalsData, savesData] = await Promise.all([
         hockeyApi.getMatchPlayers(id!),
@@ -207,12 +299,101 @@ const MatchAdmin: React.FC = () => {
     setDisplayTime(match.quarter_duration);
   };
 
+  const loadConvocationPlayers = async () => {
+    if (!match?.event_id) {
+      setConvocationPlayers([]);
+      return;
+    }
+    
+    try {
+      // Obtener el evento directamente para tener final_convocation actualizado
+      const event = await eventsApi.getEvent(match.event_id);
+      const finalConvIds = event?.final_convocation 
+        ? JSON.parse(event.final_convocation) 
+        : [];
+      
+      const convocations = await convocationApi.getConvocation(match.event_id);
+      
+      let calledPlayers;
+      
+      if (finalConvIds.length > 0) {
+        calledPlayers = convocations
+          .filter(c => finalConvIds.includes(c.player_id))
+          .filter(c => c.player?.position !== 'Portera' && c.player?.position !== 'Portero')
+          .map(c => ({
+            id: c.player_id || c.id,
+            name: c.player?.full_name || 'Jugador',
+            dorsal: c.player?.dorsal?.toString(),
+          }));
+      } else {
+        calledPlayers = convocations
+          .filter(c => c.player?.position !== 'Portera' && c.player?.position !== 'Portero')
+          .map(c => ({
+            id: c.player_id || c.id,
+            name: c.player?.full_name || 'Jugador',
+            dorsal: c.player?.dorsal?.toString(),
+          }));
+      }
+      
+      setConvocationPlayers(calledPlayers);
+    } catch (error) {
+      console.error('Error loading convocation:', error);
+      setConvocationPlayers([]);
+    }
+  };
+
+  const loadGoalkeepers = async () => {
+    if (!match?.event_id) {
+      setGoalkeepers([]);
+      return;
+    }
+    
+    try {
+      const event = await eventsApi.getEvent(match.event_id);
+      const finalConvIds = event?.final_convocation 
+        ? JSON.parse(event.final_convocation) 
+        : [];
+      
+      const convocations = await convocationApi.getConvocation(match.event_id);
+      
+      let gks;
+      
+      if (finalConvIds.length > 0) {
+        gks = convocations
+          .filter(c => finalConvIds.includes(c.player_id))
+          .filter(c => c.player?.position === 'Portera' || c.player?.position === 'Portero')
+          .map(c => ({
+            id: c.player_id || c.id,
+            name: c.player?.full_name || 'Portera',
+            dorsal: c.player?.dorsal?.toString(),
+          }));
+      } else {
+        gks = convocations
+          .filter(c => c.player?.position === 'Portera' || c.player?.position === 'Portero')
+          .map(c => ({
+            id: c.player_id || c.id,
+            name: c.player?.full_name || 'Portera',
+            dorsal: c.player?.dorsal?.toString(),
+          }));
+      }
+      
+      setGoalkeepers(gks);
+    } catch (error) {
+      console.error('Error loading goalkeepers:', error);
+      setGoalkeepers([]);
+    }
+  };
+
   const handlePlus = (team: 'team1' | 'team2') => {
     setGoalTeam(team);
     setShowGoalModal(true);
     setSelectedPlayer('');
     setCustomPlayerName('');
     setCustomPlayerNumber('');
+    
+    if (team === 'team1') {
+      loadConvocationPlayers();
+    }
   };
 
   const handleMinus = async (team: 'team1' | 'team2') => {
@@ -239,13 +420,33 @@ const MatchAdmin: React.FC = () => {
     const secondsBefore = (match.quarter - 1) * qDuration;
     const matchMinute = Math.floor((secondsBefore + elapsedInQuarter) / 60);
 
-    const selected = players.find(p => p.id === selectedPlayer && p.team === goalTeam);
+    let selectedPlayerName = 'Anónimo';
+    let selectedPlayerDorsal: string | undefined;
+    let selectedPlayerId: string | undefined;
+
+    if (selectedPlayer) {
+      if (goalTeam === 'team1' && convocationPlayers.length > 0) {
+        const convPlayer = convocationPlayers.find(p => p.id === selectedPlayer);
+        if (convPlayer) {
+          selectedPlayerName = convPlayer.name;
+          selectedPlayerDorsal = convPlayer.dorsal;
+          selectedPlayerId = convPlayer.id;
+        }
+      } else {
+        const matchPlayer = players.find(p => p.id === selectedPlayer && p.team === goalTeam);
+        if (matchPlayer) {
+          selectedPlayerName = matchPlayer.player_name;
+          selectedPlayerDorsal = matchPlayer.dorsal;
+          selectedPlayerId = matchPlayer.id;
+        }
+      }
+    }
 
     await hockeyApi.addGoal(match.id, {
       team: goalTeam,
-      player_id: selected?.id,
-      player_name: customPlayerName || selected?.player_name || 'Anónimo',
-      dorsal: customPlayerNumber || selected?.dorsal,
+      player_id: selectedPlayerId,
+      player_name: customPlayerName || selectedPlayerName,
+      dorsal: customPlayerNumber || selectedPlayerDorsal,
       quarter: match.quarter,
       elapsed_in_quarter: elapsedInQuarter,
       match_minute: matchMinute,
@@ -264,41 +465,63 @@ const MatchAdmin: React.FC = () => {
     setGoalTeam(null);
   };
 
-  const triggerSave = async () => {
+  const triggerSave = () => {
     if (!match || !isAdmin) return;
     
+    loadGoalkeepers();
+    setShowSaveModal(true);
+    setSelectedGoalkeeper('');
+    setCustomGoalkeeperName('');
+    setCustomGoalkeeperNumber('');
+  };
+
+  const confirmSave = async () => {
+    if (!match || !isAdmin) return;
+
     const qDuration = match.quarter_duration;
     const elapsedInQuarter = qDuration - displayTime;
     const secondsBefore = (match.quarter - 1) * qDuration;
     const matchMinute = Math.floor((secondsBefore + elapsedInQuarter) / 60);
 
+    let selectedGoalkeeperName = 'Portera';
+    let selectedGoalkeeperDorsal: string | undefined;
+    let selectedGoalkeeperId: string | undefined;
+
+    if (selectedGoalkeeper) {
+      if (goalkeepers.length > 0) {
+        const gk = goalkeepers.find(g => g.id === selectedGoalkeeper);
+        if (gk) {
+          selectedGoalkeeperName = gk.name;
+          selectedGoalkeeperDorsal = gk.dorsal;
+          selectedGoalkeeperId = gk.id;
+        }
+      }
+    }
+
     await hockeyApi.addSave(match.id, {
       team: 'team1',
-      player_name: 'Portera',
+      player_id: selectedGoalkeeperId,
+      player_name: customGoalkeeperName || selectedGoalkeeperName,
+      dorsal: customGoalkeeperNumber || selectedGoalkeeperDorsal,
       quarter: match.quarter,
+      elapsed_in_quarter: elapsedInQuarter,
       match_minute: matchMinute,
     });
 
     const updatedSaves = await hockeyApi.getMatchSaves(id!);
     setSaves(updatedSaves);
+
+    setShowSaveModal(false);
+    setSelectedGoalkeeper('');
+    setCustomGoalkeeperName('');
+    setCustomGoalkeeperNumber('');
   };
 
-  const finishMatch = async () => {
-    if (!match || !isAdmin) return;
-    if (!window.confirm('¿Finalizar el partido?')) return;
-    
-    await hockeyApi.updateMatch(match.id, {
-      running: false,
-      status: 'finished',
-    });
-    setMatch(prev => prev ? { ...prev, running: false, status: 'finished' } : null);
-  };
-
-  const copyShareLink = () => {
-    const url = `${window.location.origin}/hockey/${match?.share_token}/watch`;
-    navigator.clipboard.writeText(url).then(() => {
-      alert('Enlace copiado al portapapeles');
-    });
+  const closeSaveModal = () => {
+    setShowSaveModal(false);
+    setSelectedGoalkeeper('');
+    setCustomGoalkeeperName('');
+    setCustomGoalkeeperNumber('');
   };
 
   const formatTime = (seconds: number) => {
@@ -427,7 +650,7 @@ const MatchAdmin: React.FC = () => {
             Verificar PIN
           </button>
           <button
-            onClick={() => navigate('/hockey')}
+            onClick={() => navigate('/match')}
             className="w-full mt-3 bg-gray-600 text-white py-2 rounded-lg"
           >
             Volver
@@ -443,21 +666,12 @@ const MatchAdmin: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">🏑 Partido de Hockey</h1>
-            <p className="text-gray-300">
-              <span className="font-mono bg-black/30 px-2 py-1 rounded">{match.id.slice(0, 8)}</span>
-            </p>
+            <h1 className="text-3xl font-bold text-white mb-2">🏑 Partido de Hockey - Admin</h1>
           </div>
           <div className="flex gap-2">
             <button
-              onClick={copyShareLink}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg"
-            >
-              📤 Compartir
-            </button>
-            <button
-              onClick={() => navigate('/hockey')}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg"
+              onClick={() => navigate('/match')}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg"
             >
               ← Volver
             </button>
@@ -465,94 +679,127 @@ const MatchAdmin: React.FC = () => {
         </div>
 
         {/* Marcador */}
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 mb-6">
-          <div className="flex justify-between items-center mb-4">
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 md:p-6 border border-white/20 mb-4 md:mb-6">
+          {/* Tiempo - Solo visible en desktop */}
+          <div className="hidden md:block text-center mb-4">
+            <div className="text-sm text-gray-400 mb-2">CUARTO</div>
+            <div className="text-4xl font-bold text-white mb-2">{match.quarter}/4</div>
+            <div className="text-5xl md:text-6xl font-mono font-bold text-yellow-400">{formatTime(displayTime)}</div>
+            <div className="mt-4 flex gap-2 justify-center flex-wrap">
+              {!match.running ? (
+                <button
+                  onClick={startMatch}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold text-sm md:text-base"
+                >
+                  ▶ Iniciar
+                </button>
+              ) : (
+                <button
+                  onClick={pauseMatch}
+                  className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold text-sm md:text-base"
+                >
+                  ⏸ Pausar
+                </button>
+              )}
+              <button
+                onClick={resetQuarter}
+                className="bg-gray-600 text-white px-3 py-2 rounded-lg text-sm md:text-base"
+              >
+                🔄
+              </button>
+            </div>
+          </div>
+
+          {/* Equipos - Mobile: stacked, Desktop: side by side */}
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 md:gap-2">
             {/* Equipo 1 */}
-            <div className="flex-1 text-center">
+            <div className="flex-1 text-center w-full md:w-auto">
               <div
-                className="w-20 h-20 rounded-full mx-auto mb-2 flex items-center justify-center text-3xl"
+                className="w-14 h-14 md:w-20 md:h-20 rounded-full mx-auto mb-2 flex items-center justify-center overflow-hidden"
                 style={{ backgroundColor: match.team1_color + '40' }}
               >
-                {match.team1_logo_url ? (
-                  <img src={match.team1_logo_url} alt="logo" className="w-16 h-16 object-contain" />
+                {team1Logo ? (
+                  <img src={team1Logo} alt="logo" className="w-12 h-12 md:w-16 md:h-16 object-contain rounded-full" />
                 ) : (
-                  <span className="text-2xl font-bold text-white">{match.team1_name.substring(0, 2).toUpperCase()}</span>
+                  <span className="text-xl md:text-2xl font-bold text-white">{match.team1_name.substring(0, 2).toUpperCase()}</span>
                 )}
               </div>
-              <h3 className="text-xl font-bold text-white">{match.team1_name}</h3>
-              <div className="text-6xl font-bold text-white my-4">{match.score_team1}</div>
+              <h3 className="text-base md:text-xl font-bold text-white truncate max-w-full px-2">{match.team1_name}</h3>
+              <div className="text-4xl md:text-6xl font-bold text-white my-2">{match.score_team1}</div>
               <div className="flex gap-2 justify-center">
                 <button
                   onClick={() => handlePlus('team1')}
-                  className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold"
+                  className="bg-green-600 text-white px-4 md:px-6 py-2 rounded-lg font-bold text-sm md:text-base min-h-[44px]"
                 >
                   +1 Gol
                 </button>
                 <button
                   onClick={() => handleMinus('team1')}
                   disabled={match.score_team1 === 0}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold disabled:opacity-50"
+                  className="bg-red-600 text-white px-3 md:px-4 py-2 rounded-lg font-bold text-sm md:text-base min-h-[44px] disabled:opacity-50"
                 >
                   -
                 </button>
               </div>
             </div>
 
-            {/* Tiempo */}
-            <div className="text-center px-6">
-              <div className="text-sm text-gray-400 mb-2">CUARTO</div>
-              <div className="text-4xl font-bold text-white mb-2">{match.quarter}/4</div>
-              <div className="text-6xl font-mono font-bold text-yellow-400">{formatTime(displayTime)}</div>
-              <div className="mt-4 flex gap-2 justify-center">
+            {/* Tiempo - Solo visible en mobile */}
+            <div className="md:hidden text-center w-full bg-white/5 rounded-xl p-3">
+              <div className="text-xs text-gray-400">CUARTO {match.quarter}/4</div>
+              <div className="text-4xl font-mono font-bold text-yellow-400">{formatTime(displayTime)}</div>
+              <div className="mt-2 flex gap-2 justify-center">
                 {!match.running ? (
                   <button
                     onClick={startMatch}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold"
+                    className="bg-green-600 text-white px-3 py-1 rounded-lg font-bold text-sm min-h-[36px]"
                   >
-                    ▶ Iniciar
+                    ▶
                   </button>
                 ) : (
                   <button
                     onClick={pauseMatch}
-                    className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold"
+                    className="bg-yellow-600 text-white px-3 py-1 rounded-lg font-bold text-sm min-h-[36px]"
                   >
-                    ⏸ Pausar
+                    ⏸
                   </button>
                 )}
                 <button
                   onClick={resetQuarter}
-                  className="bg-gray-600 text-white px-3 py-2 rounded-lg"
+                  className="bg-gray-600 text-white px-3 py-1 rounded-lg text-sm min-h-[36px]"
                 >
                   🔄
                 </button>
               </div>
             </div>
 
+            {/* VS */}
+            <div className="hidden md:block text-2xl font-bold text-gray-500 px-2">VS</div>
+
             {/* Equipo 2 */}
-            <div className="flex-1 text-center">
+            <div className="flex-1 text-center w-full md:w-auto">
               <div
-                className="w-20 h-20 rounded-full mx-auto mb-2 flex items-center justify-center text-3xl"
+                className="w-14 h-14 md:w-20 md:h-20 rounded-full mx-auto mb-2 flex items-center justify-center overflow-hidden"
                 style={{ backgroundColor: match.team2_color + '40' }}
               >
-                {match.team2_logo_url ? (
-                  <img src={match.team2_logo_url} alt="logo" className="w-16 h-16 object-contain" />
+                {team2Logo ? (
+                  <img src={team2Logo} alt="logo" className="w-12 h-12 md:w-16 md:h-16 object-contain rounded-full" />
                 ) : (
-                  <span className="text-2xl font-bold text-white">{match.team2_name.substring(0, 2).toUpperCase()}</span>
+                  <span className="text-xl md:text-2xl font-bold text-white">{match.team2_name.substring(0, 2).toUpperCase()}</span>
                 )}
               </div>
-              <h3 className="text-xl font-bold text-white">{match.team2_name}</h3>
-              <div className="text-6xl font-bold text-white my-4">{match.score_team2}</div>
+              <h3 className="text-base md:text-xl font-bold text-white truncate max-w-full px-2">{match.team2_name}</h3>
+              <div className="text-4xl md:text-6xl font-bold text-white my-2">{match.score_team2}</div>
               <div className="flex gap-2 justify-center">
                 <button
                   onClick={() => handlePlus('team2')}
-                  className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold"
+                  className="bg-green-600 text-white px-4 md:px-6 py-2 rounded-lg font-bold text-sm md:text-base min-h-[44px]"
                 >
                   +1 Gol
                 </button>
                 <button
                   onClick={() => handleMinus('team2')}
                   disabled={match.score_team2 === 0}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold disabled:opacity-50"
+                  className="bg-red-600 text-white px-3 md:px-4 py-2 rounded-lg font-bold text-sm md:text-base min-h-[44px] disabled:opacity-50"
                 >
                   -
                 </button>
@@ -566,7 +813,7 @@ const MatchAdmin: React.FC = () => {
               <button
                 key={q}
                 onClick={() => setQuarter(q)}
-                className={`px-4 py-2 rounded-lg font-bold ${
+                className={`px-3 py-2 md:px-4 md:py-2 rounded-lg font-bold text-sm md:text-base min-w-[44px] ${
                   match.quarter === q
                     ? 'bg-blue-600 text-white'
                     : 'bg-white/10 text-white hover:bg-white/20'
@@ -576,161 +823,220 @@ const MatchAdmin: React.FC = () => {
               </button>
             ))}
           </div>
-
-          {/* Botones para gestionar jugadores por equipo */}
-          <div className="mt-6 p-4 bg-yellow-600/20 rounded-xl border border-yellow-600">
-            <p className="text-yellow-300 text-center mb-3">Gestión de jugadores</p>
-            <div className="flex gap-2 justify-center flex-wrap">
-              {getTeamPlayers('team1').length === 0 && (
-                <button
-                  onClick={() => openManagePlayers('team1')}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-bold"
-                >
-                  👥 Añadir {match.team1_name}
-                </button>
-              )}
-              {getTeamPlayers('team2').length === 0 && (
-                <button
-                  onClick={() => openManagePlayers('team2')}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-bold"
-                >
-                  👥 Añadir {match.team2_name}
-                </button>
-              )}
-              {getTeamPlayers('team1').length > 0 && getTeamPlayers('team2').length > 0 && (
-                <p className="text-green-400 text-center w-full">✓ Todos los equipos tienen jugadores</p>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* Controles adicionales */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div className="bg-white/10 rounded-xl p-4 border border-white/10">
-            <h3 className="text-white font-bold mb-3">🧤 Paradas del Portero</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          {/* Historial de Paradas */}
+          <div className="bg-white/10 rounded-xl p-3 md:p-4 border border-white/10">
+            <h3 className="text-white font-bold mb-2 text-sm md:text-base">🧤 Paradas ({saves.length})</h3>
             <button
               onClick={triggerSave}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold text-lg"
+              className="w-full bg-blue-600 text-white py-2 md:py-3 rounded-lg font-bold text-sm md:text-base min-h-[44px]"
             >
               🧤 Registrar Parada
             </button>
-            <p className="text-gray-400 text-sm mt-2">
-              Paradas registradas: {saves.length}
-            </p>
-          </div>
-
-          <div className="bg-white/10 rounded-xl p-4 border border-white/10">
-            <h3 className="text-white font-bold mb-3">⚙️ Acciones</h3>
-            <div className="space-y-2">
-              <button
-                onClick={finishMatch}
-                disabled={match.status === 'finished'}
-                className="w-full bg-red-600 text-white py-2 rounded-lg font-bold disabled:opacity-50"
-              >
-                🏁 Finalizar Partido
-              </button>
-              <a
-                href={`/hockey/${match.share_token}/watch`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full bg-purple-600 text-white py-2 rounded-lg font-bold text-center"
-              >
-                👀 Vista Espectador
-              </a>
+            <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto mt-2">
+              {saves.length === 0 ? (
+                <p className="text-gray-400 text-xs md:text-sm">Sin paradas registradas</p>
+              ) : (
+                saves.map(save => (
+                  <div key={save.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-blue-400 font-bold text-xs md:text-sm whitespace-nowrap">
+                        Q{save.quarter} - {save.match_minute}'
+                      </span>
+                      <span className="text-white text-xs md:text-sm">
+                        {save.player_name || 'Portera'} {save.dorsal && `#${save.dorsal}`}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => hockeyApi.removeSave(save.id).then(loadMatch)}
+                      className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Historial de goles */}
-        <div className="bg-white/10 rounded-xl p-4 border border-white/10">
-          <h3 className="text-white font-bold mb-3">🏑 Historial de Goles ({goals.length})</h3>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {goals.length === 0 ? (
-              <p className="text-gray-400 text-sm">No hay goles todavía</p>
-            ) : (
-              goals.map(goal => (
-                <div key={goal.id} className="flex items-center justify-between bg-white/5 p-2 rounded">
-                  <div className="flex items-center gap-3">
-                    <span className="text-yellow-400 font-bold">Q{goal.quarter}'</span>
-                    <span
-                      className="px-2 py-1 rounded text-sm font-bold"
-                      style={{ 
-                        backgroundColor: goal.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
-                        color: goal.team === 'team1' ? match.team1_color : match.team2_color
-                      }}
+          {/* Historial de Goles */}
+          <div className="bg-white/10 rounded-xl p-3 md:p-4 border border-white/10">
+            <h3 className="text-white font-bold mb-2 text-sm md:text-base">🏑 Goles ({goals.length})</h3>
+            <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
+              {goals.length === 0 ? (
+                <p className="text-gray-400 text-xs md:text-sm">Sin goles registrados</p>
+              ) : (
+                goals.map(goal => (
+                  <div key={goal.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-yellow-400 font-bold text-xs md:text-sm whitespace-nowrap">
+                        Q{goal.quarter} - {goal.match_minute}'
+                      </span>
+                      <span
+                        className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                        style={{ 
+                          backgroundColor: goal.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                          color: goal.team === 'team1' ? match.team1_color : match.team2_color
+                        }}
+                      >
+                        {goal.team === 'team1' ? match.team1_name : match.team2_name}
+                      </span>
+                      <span className="text-white text-xs md:text-sm">
+                        {goal.player_name} {goal.dorsal && `#${goal.dorsal}`}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => hockeyApi.removeGoal(goal.id).then(loadMatch)}
+                      className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
                     >
-                      {goal.team === 'team1' ? match.team1_name : match.team2_name}
-                    </span>
-                    <span className="text-white">
-                      {goal.player_name} {goal.dorsal && `#${goal.dorsal}`}
-                    </span>
+                      🗑️
+                    </button>
                   </div>
-                  <button
-                    onClick={() => hockeyApi.removeGoal(goal.id).then(loadMatch)}
-                    className="text-red-400 hover:text-red-300"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
 
         {/* Modal de gol */}
         {showGoalModal && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-[#071025] rounded-2xl p-6 max-w-md w-full border border-white/10">
-              <h3 className="text-xl font-bold text-white mb-4">
-                🏑 Registrar Gol - {goalTeam === 'team1' ? match.team1_name : match.team2_name}
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 md:p-4">
+            <div className="bg-[#071025] rounded-2xl p-4 md:p-6 w-full max-w-md border border-white/10 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-lg md:text-xl font-bold text-white mb-3 md:mb-4">
+                🏑 Gol - {goalTeam === 'team1' ? match.team1_name : match.team2_name}
               </h3>
               
-              <div className="mb-4">
-                <label className="block text-sm text-gray-300 mb-2">Seleccionar jugador</label>
+              <div className="mb-3 md:mb-4">
+                <label className="block text-sm text-gray-300 mb-1 md:mb-2">Seleccionar jugador</label>
                 <select
                   value={selectedPlayer}
                   onChange={(e) => setSelectedPlayer(e.target.value)}
-                  className="w-full p-3 rounded bg-white/10 text-white border border-white/20"
+                  className="w-full p-3 rounded bg-white text-gray-800 border border-gray-300 text-sm md:text-base"
                 >
                   <option value="">-- Seleccionar --</option>
-                  {getTeamPlayers(goalTeam!).map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.player_name} {p.dorsal && `#${p.dorsal}`}
-                    </option>
-                  ))}
+                  {goalTeam === 'team1' && convocationPlayers.length > 0 ? (
+                    convocationPlayers.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.dorsal && `#${p.dorsal}`}
+                      </option>
+                    ))
+                  ) : (
+                    getTeamPlayers(goalTeam!).map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.player_name} {p.dorsal && `#${p.dorsal}`}
+                      </option>
+                    ))
+                  )}
                 </select>
+                {goalTeam === 'team1' && convocationPlayers.length === 0 && getTeamPlayers(goalTeam!).length === 0 && (
+                  <p className="text-xs text-yellow-400 mt-1">No hay jugadoras en la convocatoria</p>
+                )}
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm text-gray-300 mb-2">O escribir nombre manual</label>
+              <div className="mb-3 md:mb-4">
+                <label className="block text-sm text-gray-300 mb-1 md:mb-2">O escribir nombre manual</label>
                 <input
                   type="text"
                   value={customPlayerName}
                   onChange={(e) => setCustomPlayerName(e.target.value)}
-                  className="w-full p-2 rounded bg-white/10 text-white border border-white/20 mb-2"
+                  className="w-full p-2 md:p-3 rounded bg-white text-gray-800 border border-gray-300 mb-2 text-sm md:text-base"
                   placeholder="Nombre del jugador"
                 />
                 <input
                   type="text"
                   value={customPlayerNumber}
                   onChange={(e) => setCustomPlayerNumber(e.target.value)}
-                  className="w-full p-2 rounded bg-white/10 text-white border border-white/20"
+                  className="w-full p-2 md:p-3 rounded bg-white text-gray-800 border border-gray-300 text-sm md:text-base"
                   placeholder="Dorsal (opcional)"
                 />
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-2 md:gap-3">
                 <button
                   onClick={() => setShowGoalModal(false)}
-                  className="flex-1 bg-gray-600 text-white py-2 rounded-lg"
+                  className="flex-1 bg-gray-600 text-white py-2 md:py-3 rounded-lg text-sm md:text-base min-h-[44px]"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={confirmGoal}
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold"
+                  className="flex-1 bg-green-600 text-white py-2 md:py-3 rounded-lg font-bold text-sm md:text-base min-h-[44px]"
                 >
-                  Confirmar Gol
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de parada */}
+        {showSaveModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 md:p-4">
+            <div className="bg-[#071025] rounded-2xl p-4 md:p-6 w-full max-w-md border border-white/10 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-lg md:text-xl font-bold text-white mb-3 md:mb-4">
+                🧤 Parada - {match.team1_name}
+              </h3>
+              
+              <div className="mb-3 md:mb-4">
+                <label className="block text-sm text-gray-300 mb-1 md:mb-2">Seleccionar portera</label>
+                <select
+                  value={selectedGoalkeeper}
+                  onChange={(e) => setSelectedGoalkeeper(e.target.value)}
+                  className="w-full p-3 rounded bg-white text-gray-800 border border-gray-300 text-sm md:text-base"
+                >
+                  <option value="">-- Seleccionar --</option>
+                  {goalkeepers.length > 0 ? (
+                    goalkeepers.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} {g.dorsal && `#${g.dorsal}`}
+                      </option>
+                    ))
+                  ) : (
+                    getTeamPlayers('team1').filter(p => p.position === 'Portera' || p.position === 'Portero').map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.player_name} {p.dorsal && `#${p.dorsal}`}
+                      </option>
+                    ))
+                  )}
+                </select>
+                {goalkeepers.length === 0 && getTeamPlayers('team1').filter(p => p.position === 'Portera' || p.position === 'Portero').length === 0 && (
+                  <p className="text-xs text-yellow-400 mt-1">No hay porteras en la convocatoria</p>
+                )}
+              </div>
+
+              <div className="mb-3 md:mb-4">
+                <label className="block text-sm text-gray-300 mb-1 md:mb-2">O escribir nombre manual</label>
+                <input
+                  type="text"
+                  value={customGoalkeeperName}
+                  onChange={(e) => setCustomGoalkeeperName(e.target.value)}
+                  className="w-full p-2 md:p-3 rounded bg-white text-gray-800 border border-gray-300 mb-2 text-sm md:text-base"
+                  placeholder="Nombre de la portera"
+                />
+                <input
+                  type="text"
+                  value={customGoalkeeperNumber}
+                  onChange={(e) => setCustomGoalkeeperNumber(e.target.value)}
+                  className="w-full p-2 md:p-3 rounded bg-white text-gray-800 border border-gray-300 text-sm md:text-base"
+                  placeholder="Dorsal (opcional)"
+                />
+              </div>
+
+              <div className="flex gap-2 md:gap-3">
+                <button
+                  onClick={closeSaveModal}
+                  className="flex-1 bg-gray-600 text-white py-2 md:py-3 rounded-lg text-sm md:text-base min-h-[44px]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmSave}
+                  className="flex-1 bg-green-600 text-white py-2 md:py-3 rounded-lg font-bold text-sm md:text-base min-h-[44px]"
+                >
+                  Confirmar
                 </button>
               </div>
             </div>

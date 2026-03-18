@@ -37,12 +37,15 @@ const TeamsList: React.FC = () => {
   const [eventConvocations, setEventConvocations] = useState<any[]>([]);
   const [loadingConvocations, setLoadingConvocations] = useState(false);
   const [eventTeamName, setEventTeamName] = useState<string>('');
+  const [eventClubName, setEventClubName] = useState<string>('');
   const [showConvocationModal, setShowConvocationModal] = useState(false);
   const [convocationPlayers, setConvocationPlayers] = useState<any[]>([]);
   const [eventHasConvocation, setEventHasConvocation] = useState(false);
   const [showAddPlayersModal, setShowAddPlayersModal] = useState(false);
   const [availablePlayers, setAvailablePlayers] = useState<any[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalType, setSuccessModalType] = useState<'convocation' | 'match'>('convocation');
+  const [matchUrl, setMatchUrl] = useState<string>('');
   const [selectedEventForTraining, setSelectedEventForTraining] = useState<Event | null>(null);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -212,11 +215,12 @@ const TeamsList: React.FC = () => {
               const selectedTeamObj = teams.find(t => t.id === teamId);
               const kitParts = (eventData.kit_color || '').split(';');
               await hockeyApi.createMatch({
-                team1_name: selectedTeamObj?.name || 'Equipo Local',
+                team1_name: selectedTeamObj?.club?.name || selectedTeamObj?.name || 'Equipo Local',
                 team1_color: kitParts[0] || '#1E40AF',
                 team2_name: eventData.opponent || 'Equipo Visitante',
                 team2_color: kitParts[1] || '#FFFFFF',
                 quarter_duration: 900,
+                event_id: newEvent.id,
               });
             } catch (hockeyError) {
               console.error('Error creating hockey match:', hockeyError);
@@ -310,14 +314,17 @@ const TeamsList: React.FC = () => {
               const selectedTeamObj = teams.find(t => t.id === selectedTeam);
               const kitParts = (eventDataToSave.kit_color || '').split(';');
               const hockeyMatch = await hockeyApi.createMatch({
-                team1_name: selectedTeamObj?.name || 'Equipo Local',
+                team1_name: selectedTeamObj?.club?.name || selectedTeamObj?.name || 'Equipo Local',
                 team1_color: kitParts[0] || '#1E40AF',
                 team2_name: eventDataToSave.opponent || 'Equipo Visitante',
                 team2_color: kitParts[1] || '#FFFFFF',
                 quarter_duration: 900,
+                event_id: newEvent.id,
               });
               console.log('Hockey match created:', hockeyMatch);
-              alert('Partido creado correctamente. Acceso al seguimiento en vivo: /match/' + hockeyMatch.id);
+              setMatchUrl(hockeyMatch.id);
+              setSuccessModalType('match');
+              setShowSuccessModal(true);
             } catch (hockeyError) {
               console.error('Error creating hockey match:', hockeyError);
             }
@@ -359,6 +366,9 @@ const TeamsList: React.FC = () => {
   const handleDeleteEvent = async () => {
     if (!eventToDelete) return;
     try {
+      // Delete associated hockey match if exists
+      await hockeyApi.deleteMatchByEventId(eventToDelete);
+      // Delete the event
       await eventsApi.deleteEvent(eventToDelete);
       await loadData();
     } catch (error) {
@@ -386,6 +396,7 @@ const TeamsList: React.FC = () => {
       
       const teamData = teams.find(t => t.id === event.team_id);
       setEventTeamName(teamData?.name || '');
+      setEventClubName(teamData?.club?.name || '');
     } catch (error) {
       console.error('Error loading convocations:', error);
     }
@@ -638,12 +649,12 @@ const TeamsList: React.FC = () => {
             <div className="space-y-3">
               {events.map(event => (
                 <div key={event.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
-                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3">
                     <span className="text-2xl">{getEventTypeIcon(event.type)}</span>
                     <div>
                       <p className="font-semibold text-gray-800">
                         {event.type === 'match' && event.opponent 
-                          ? `${event.team?.name || 'Equipo'} vs ${event.opponent}`
+                          ? `${event.team?.club?.name || 'Equipo Local'} vs ${event.opponent}`
                           : event.title || getEventTypeLabel(event.type)
                         }
                       </p>
@@ -1378,7 +1389,7 @@ const TeamsList: React.FC = () => {
               <div className="flex justify-between items-center mb-4">
                 {selectedEventDetail.type === 'match' ? (
                   <h3 className="text-xl font-bold text-gray-800">
-                    Partido: {eventTeamName} vs {selectedEventDetail.opponent || 'Rival'}
+                    Partido: {eventClubName || eventTeamName} vs {selectedEventDetail.opponent || 'Rival'}
                   </h3>
                 ) : (
                   <h3 className="text-xl font-bold text-gray-800">
@@ -1630,8 +1641,20 @@ const TeamsList: React.FC = () => {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 max-w-sm w-full text-center">
               <div className="text-5xl mb-4">✅</div>
-              <h3 className="text-xl font-bold mb-2 text-gray-800">Convocatoria Guardada</h3>
-              <p className="text-gray-600 mb-6">La convocatoria se ha guardado correctamente.</p>
+              {successModalType === 'match' ? (
+                <>
+                  <h3 className="text-xl font-bold mb-2 text-gray-800">Partido Creado</h3>
+                  <p className="text-gray-600 mb-4">El partido se ha creado correctamente.</p>
+                  <p className="text-sm text-blue-600 mb-6">
+                    Seguimiento en vivo: /match/{matchUrl}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-xl font-bold mb-2 text-gray-800">Convocatoria Guardada</h3>
+                  <p className="text-gray-600 mb-6">La convocatoria se ha guardado correctamente.</p>
+                </>
+              )}
               <button
                 onClick={() => setShowSuccessModal(false)}
                 className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700"

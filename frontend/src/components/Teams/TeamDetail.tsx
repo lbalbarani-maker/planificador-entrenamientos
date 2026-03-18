@@ -18,8 +18,7 @@ const TeamDetail: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<string>('');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerNumber, setNewPlayerNumber] = useState('');
-  const [newPlayerPosition, setNewPlayerPosition] = useState<'Jugadora' | 'Portera'>('Jugadora');
-  const [editingPlayer, setEditingPlayer] = useState<{ id: string; name: string; number: string; position: string } | null>(null);
+  const [editingPlayer, setEditingPlayer] = useState<{ id: string; name: string; number: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'players' | 'events'>('players');
   const [addingPlayers, setAddingPlayers] = useState<string[]>([]);
 
@@ -68,13 +67,11 @@ const TeamDetail: React.FC = () => {
       await teamsApi.addPlayerToTeam(
         id!, 
         player.id, 
-        newPlayerNumber ? parseInt(newPlayerNumber) : undefined,
-        newPlayerPosition
+        newPlayerNumber ? parseInt(newPlayerNumber) : undefined
       );
       await loadData();
       setNewPlayerName('');
       setNewPlayerNumber('');
-      setNewPlayerPosition('Jugadora');
       setShowPlayerForm(false);
     } catch (error) {
       console.error('Error adding player:', error);
@@ -114,7 +111,6 @@ const TeamDetail: React.FC = () => {
     try {
       await teamsApi.updateTeamPlayer(editingPlayer.id, {
         shirt_number: editingPlayer.number ? parseInt(editingPlayer.number) : undefined,
-        position: editingPlayer.position,
       });
       await loadData();
       setEditingPlayer(null);
@@ -243,7 +239,7 @@ const TeamDetail: React.FC = () => {
                       <div>
                         <p className="font-semibold">{tp.player?.full_name}</p>
                         <p className="text-sm text-gray-500">
-                          {tp.position === 'Portera' ? '🥅 Portera' : 'Jugadora'}
+                          {tp.player?.position === 'Portero' || tp.player?.position === 'Portera' ? '🥅 ' : ''}{tp.player?.position || 'Jugador'}
                         </p>
                       </div>
                     </div>
@@ -253,7 +249,6 @@ const TeamDetail: React.FC = () => {
                           id: tp.id,
                           name: tp.player?.full_name || '',
                           number: tp.shirt_number?.toString() || '',
-                          position: tp.position || 'Jugadora'
                         })}
                         className="text-blue-600 hover:text-blue-800"
                       >
@@ -387,17 +382,6 @@ const TeamDetail: React.FC = () => {
                     max="99"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Posición</label>
-                  <select
-                    value={newPlayerPosition}
-                    onChange={(e) => setNewPlayerPosition(e.target.value as 'Jugadora' | 'Portera')}
-                    className="w-full p-2 border border-gray-300 rounded-lg"
-                  >
-                    <option value="Jugadora">Jugadora</option>
-                    <option value="Portera">Portera</option>
-                  </select>
-                </div>
                 <div className="flex gap-2">
                   <button
                     type="submit"
@@ -434,17 +418,6 @@ const TeamDetail: React.FC = () => {
                     min="1"
                     max="99"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Posición</label>
-                  <select
-                    value={editingPlayer.position}
-                    onChange={(e) => setEditingPlayer({ ...editingPlayer, position: e.target.value })}
-                    className="w-full p-2 border border-gray-300 rounded-lg"
-                  >
-                    <option value="Jugadora">Jugadora</option>
-                    <option value="Portera">Portera</option>
-                  </select>
                 </div>
                 <div className="flex gap-2">
                   <button

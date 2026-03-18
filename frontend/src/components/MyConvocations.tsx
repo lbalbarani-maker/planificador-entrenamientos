@@ -14,6 +14,9 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
 
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const isPlayerRole = user.role === 'jugador' || (user.role?.includes('jugador') && !user.role?.includes('admin'));
+
   const loadPlayers = async () => {
     try {
       const { data: playersData } = await supabase
@@ -40,6 +43,10 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
       const teamsData = await teamsApi.getTeams();
       setTeams(teamsData);
 
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayMs = today.getTime();
+
       const { data: convData } = await supabase
         .from('convocation')
         .select('*')
@@ -51,19 +58,31 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
           .from('events')
           .select('*')
           .in('id', eventIds)
-          .order('start_datetime', { ascending: false });
+          .order('start_datetime', { ascending: true });
 
         const enrichedConvocations = convData.map(conv => {
           const event = eventsData?.find(e => e.id === conv.event_id);
           const team = teamsData.find(t => t.id === event?.team_id);
           const finalConv = event?.final_convocation ? JSON.parse(event.final_convocation) : [];
           const isConvoked = finalConv.includes(playerId);
+          const hasFinalConvList = finalConv.length > 0;
+          const isNotConvoked = hasFinalConvList && !isConvoked;
           return {
             ...conv,
             event: event || null,
             teamName: team?.name || '',
-            isConvoked
+            isConvoked,
+            hasFinalConvList,
+            isNotConvoked
           };
+        }).filter(conv => {
+          if (!conv.event) return false;
+          const eventDate = new Date(conv.event.start_datetime).getTime();
+          return eventDate >= todayMs;
+        }).sort((a, b) => {
+          const dateA = a.event ? new Date(a.event.start_datetime).getTime() : 0;
+          const dateB = b.event ? new Date(b.event.start_datetime).getTime() : 0;
+          return dateA - dateB;
         });
 
         setConvocations(enrichedConvocations);
@@ -115,6 +134,25 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
     });
   };
 
+  const addToCalendar = (event: Event, teamName: string) => {
+    const eventTitle = event.type === 'match' 
+      ? `Partido: ${teamName} vs ${event.opponent || 'Rival'}`
+      : event.type === 'training'
+      ? `Entrenamiento: ${teamName}`
+      : `Evento: ${teamName}`;
+    
+    const startDate = new Date(event.start_datetime);
+    const endDate = new Date(startDate.getTime() + 90 * 60 * 1000);
+    
+    const formatForCalendar = (date: Date) => {
+      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    };
+
+    const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventTitle)}&dates=${formatForCalendar(startDate)}/${formatForCalendar(endDate)}&details=${encodeURIComponent(event.location || 'Por confirmar')}&location=${encodeURIComponent(event.location_link || event.location || '')}`;
+    
+    window.open(calendarUrl, '_blank');
+  };
+
   if (!playerId) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -147,20 +185,29 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
   const acceptedConvocations = convocations.filter(c => c.status === 'accepted');
   const declinedConvocations = convocations.filter(c => c.status === 'declined');
 
+  const selectedPlayerName = players.find(p => p.id === playerId)?.full_name || 'Sin asignar';
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-gray-800">🏆 Mis Convocatorias</h2>
-        <select
-          value={playerId}
-          onChange={(e) => handlePlayerChange(e.target.value)}
-          className="p-2 border border-gray-300 rounded-lg text-sm"
-        >
-          <option value="">Cambiar jugadora...</option>
-          {players.map(player => (
-            <option key={player.id} value={player.id}>{player.full_name}</option>
-          ))}
-        </select>
+        {isPlayerRole ? (
+          <div className="px-3 py-1.5 bg-gray-100 rounded-lg flex items-center gap-2">
+            <span>👤</span>
+            <span className="text-sm font-medium text-gray-700">{selectedPlayerName}</span>
+          </div>
+        ) : (
+          <select
+            value={playerId}
+            onChange={(e) => handlePlayerChange(e.target.value)}
+            className="p-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="">Cambiar jugadora...</option>
+            {players.map(player => (
+              <option key={player.id} value={player.id}>{player.full_name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {convocations.length === 0 ? (
@@ -208,32 +255,78 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
             <div>
               <h3 className="font-semibold text-green-700 mb-2">✅ Disponibles</h3>
               <div className="space-y-2">
-                {acceptedConvocations.map(conv => (
-                  <div key={conv.id} className={`border rounded-lg p-4 ${(conv as any).isConvoked ? 'bg-blue-50 border-blue-300' : 'bg-green-50 border-green-200'}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold">
-                          {conv.event?.type === 'match' ? '🏑 Partido' : conv.event?.type === 'training' ? '🏋️ Entrenamiento' : '📋 Reunión'}
-                          {conv.event?.type === 'match' && conv.event?.opponent && ` vs ${conv.event.opponent}`}
-                        </p>
-                        <p className="text-sm text-gray-600">{formatDate(conv.event?.start_datetime || '')}</p>
-                        {conv.event?.location && <p className="text-sm text-gray-500">📍 {conv.event.location}</p>}
-                        {conv.teamName && <p className="text-sm text-gray-500">👥 {conv.teamName}</p>}
-                        {(conv as any).isConvoked && (
-                          <span className="inline-block mt-1 bg-blue-600 text-white text-xs px-2 py-1 rounded font-medium">
-                            🎯 CONVOCADA
-                          </span>
-                        )}
+                {acceptedConvocations.map(conv => {
+                  const isMatch = conv.event?.type === 'match';
+                  const isConvoked = (conv as any).isConvoked;
+                  const isNotConvoked = (conv as any).isNotConvoked;
+                  const hasFinalConvList = (conv as any).hasFinalConvList;
+                  
+                  let cardClass = 'border rounded-lg p-4 ';
+                  if (isMatch && isConvoked) {
+                    cardClass += 'bg-blue-50 border-blue-300';
+                  } else if (isMatch && isNotConvoked) {
+                    cardClass += 'bg-gray-50 border-gray-300';
+                  } else {
+                    cardClass += 'bg-green-50 border-green-200';
+                  }
+                  
+                  return (
+                    <div key={conv.id} className={cardClass}>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-semibold">
+                            {conv.event?.type === 'match' ? '🏑 Partido' : conv.event?.type === 'training' ? '🏋️ Entrenamiento' : '📋 Reunión'}
+                            {conv.event?.type === 'match' && conv.event?.opponent && ` vs ${conv.event.opponent}`}
+                          </p>
+                          <p className="text-sm text-gray-600">{formatDate(conv.event?.start_datetime || '')}</p>
+                          {conv.event?.location && <p className="text-sm text-gray-500">📍 {conv.event.location}</p>}
+                          {conv.teamName && <p className="text-sm text-gray-500">👥 {conv.teamName}</p>}
+                          
+                          {/* Tags según estado - Solo para partidos */}
+                          {isMatch && isConvoked && (
+                            <span className="inline-block mt-2 bg-blue-600 text-white text-xs px-2 py-1 rounded font-medium">
+                              🎯 CONVOCADA
+                            </span>
+                          )}
+                          {isMatch && isNotConvoked && (
+                            <span className="inline-block mt-2 bg-red-500 text-white text-xs px-2 py-1 rounded font-medium">
+                              🚫 NO CONVOCADA
+                            </span>
+                          )}
+                          {isMatch && !isConvoked && !isNotConvoked && hasFinalConvList === false && (
+                            <span className="inline-block mt-2 bg-yellow-500 text-white text-xs px-2 py-1 rounded font-medium">
+                              ⏸️ CONVOCATORIA PENDIENTE
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Botones según estado */}
+                        <div className="flex items-center gap-2">
+                          {/* Botón calendario para partidos convocados y entrenamientos */}
+                          {(isMatch && isConvoked) || !isMatch ? (
+                            <button
+                              onClick={() => addToCalendar(conv.event!, conv.teamName || 'Equipo')}
+                              className="bg-sanse-blue text-white px-3 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-1"
+                            >
+                              <span>+</span>
+                              <span>🗓️</span>
+                            </button>
+                          ) : null}
+                          
+                          {/* Botón cambiar para entrenamientos */}
+                          {!isMatch && (
+                            <button
+                              onClick={() => handleUpdateStatus(conv.id, 'pending')}
+                              className="text-sm text-gray-500 hover:text-gray-700"
+                            >
+                              Cambiar
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleUpdateStatus(conv.id, 'pending')}
-                        className="text-sm text-gray-500 hover:text-gray-700"
-                      >
-                        Cambiar
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

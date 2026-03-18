@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
-import { teamsApi, fieldsApi, opponentTeamsApi } from '../../lib/supabaseTeams';
+import { teamsApi, fieldsApi, opponentTeamsApi, eventsApi, convocationApi } from '../../lib/supabaseTeams';
 import { tournamentsApi } from '../../lib/supabaseTournaments';
-import { Team, TeamPlayer, Field, OpponentTeam } from '../../types/teams';
+import { Team, TeamPlayer, Field, OpponentTeam, Event } from '../../types/teams';
 import { HockeyPlayer } from '../../types/hockey';
 import { Season, Tournament, Matchday } from '../../types/tournaments';
 
@@ -73,6 +73,7 @@ const MatchSetup: React.FC = () => {
   const [selectedSeason, setSelectedSeason] = useState<string>('');
   const [selectedTournament, setSelectedTournament] = useState<string>('');
   const [selectedMatchday, setSelectedMatchday] = useState<string>('');
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
 
   const [sponsor, setSponsor] = useState({
     logo: '',
@@ -124,6 +125,63 @@ const MatchSetup: React.FC = () => {
       setSelectedMatchday('');
     }
   }, [selectedTournament]);
+
+  useEffect(() => {
+    if (selectedMatchday) {
+      loadConvocationFromMatchday(selectedMatchday);
+    } else {
+      setSelectedEvent(null);
+    }
+  }, [selectedMatchday]);
+
+  const loadConvocationFromMatchday = async (matchdayId: string) => {
+    try {
+      const matchday = matchdays.find(m => m.id === matchdayId);
+      if (!matchday) return;
+
+      const events = await eventsApi.getEvents(localTeam || undefined);
+      const matchEvent = events.find(e => 
+        e.type === 'match' && 
+        e.team_id === localTeam
+      );
+      
+      if (!matchEvent) return;
+      
+      setSelectedEvent(matchEvent);
+
+      const convocations = await convocationApi.getConvocation(matchEvent.id);
+      
+      // Obtener la lista de IDs de la convocatoria final
+      const finalConvIds = matchEvent.final_convocation 
+        ? JSON.parse(matchEvent.final_convocation) 
+        : [];
+      
+      let playersToLoad;
+      
+      if (finalConvIds.length > 0) {
+        // Usar solo los jugadores de la convocatoria final
+        playersToLoad = convocations.filter(c => finalConvIds.includes(c.player_id));
+      } else {
+        // Si no hay convocatoria final, usar todas las disponibles
+        playersToLoad = convocations;
+      }
+      
+      if (playersToLoad.length > 0) {
+        const playersFromConvocation: PlayerData[] = playersToLoad.map(c => ({
+          id: c.player_id || Date.now().toString() + Math.random().toString(36).substr(2),
+          name: c.player?.full_name || 'Jugador',
+          number: c.player?.dorsal?.toString() || '',
+          position: 'Jugadora',
+          selected: true,
+          is_goalkeeper: false,
+        }));
+        
+        setTeam1(prev => ({ ...prev, players: playersFromConvocation }));
+      }
+    } catch (error) {
+      console.error('Error loading convocation:', error);
+    }
+  };
 
   const loadAll = async () => {
     const [teamsData, fieldsData, opponentsData, seasonsData] = await Promise.all([
@@ -326,6 +384,7 @@ const MatchSetup: React.FC = () => {
         sponsor_text: sponsor.text || undefined,
         youtube_url: youtubeUrl || undefined,
         admin_pin: adminPin,
+        event_id: selectedEvent?.id,
       });
 
       const playersToSave: HockeyPlayer[] = [];

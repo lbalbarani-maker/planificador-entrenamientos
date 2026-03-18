@@ -2,8 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import YouTube from 'react-youtube';
 import { hockeyApi } from '../../lib/supabaseHockey';
+import { teamsApi, clubsApi, eventsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
 import { HockeyMatch, HockeyGoal, HockeySave } from '../../types/hockey';
+import MatchEventOverlay from './MatchEventOverlay';
+import FloatingReactions, { FloatingReactionsRef } from './FloatingReactions';
 
 const MatchSpectator: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -14,11 +17,36 @@ const MatchSpectator: React.FC = () => {
   const [saves, setSaves] = useState<HockeySave[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayTime, setDisplayTime] = useState(0);
-  const [visibleEvent, setVisibleEvent] = useState<'goal' | 'save' | null>(null);
+  const [visibleEvent, setVisibleEvent] = useState<'goal' | 'save' | 'rival_goal' | null>(null);
   const [eventTeam, setEventTeam] = useState<'team1' | 'team2' | null>(null);
   const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(30);
+  const [team1Logo, setTeam1Logo] = useState<string>('');
+  const [team2Logo, setTeam2Logo] = useState<string>('');
+  const [team1Category, setTeam1Category] = useState<string>('');
+  const [team2Category, setTeam2Category] = useState<string>('');
   const playerRef = useRef<any>(null);
+  const floatingReactionsRef = useRef<FloatingReactionsRef>(null);
+  const [lastGoalInfo, setLastGoalInfo] = useState<{player_name?: string; dorsal?: string; quarter?: number} | null>(null);
+  const isInitialLoad = useRef(true);
+  const previousGoalsLength = useRef(0);
+  const previousSavesLength = useRef(0);
+
+  const sendReaction = async (type: string) => {
+    if (!match?.id) return;
+    
+    // Mostrar reacción local inmediatamente
+    floatingReactionsRef.current?.addReaction(type);
+    
+    try {
+      await supabase.from("match_reactions").insert({
+        match_id: match.id,
+        type,
+      });
+    } catch (error) {
+      console.error("Error sending reaction:", error);
+    }
+  };
 
   useEffect(() => {
     if (token) loadMatch();
@@ -42,47 +70,36 @@ const MatchSpectator: React.FC = () => {
 
   // Suscripción a Supabase Realtime
   useEffect(() => {
-    if (!match?.id) return;
-    
+    if (!match) return;
+
     const channel = supabase
-      .channel(`hockey-spectator-${match.id}`)
+      .channel("match-updates")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'hockey_matches',
-          filter: `id=eq.${match.id}`,
+          event: "*",
+          schema: "public",
+          table: "hockey_goals",
+          filter: `match_id=eq.${match.id}`,
         },
         (payload) => {
-          if (payload.new) {
-            const newData = payload.new as HockeyMatch;
-            setMatch(prev => prev ? { ...prev, ...newData } : newData);
+          if (payload.eventType === "INSERT") {
+            loadMatch();
           }
         }
       )
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'hockey_goals',
+          event: "*",
+          schema: "public",
+          table: "hockey_saves",
           filter: `match_id=eq.${match.id}`,
         },
-        () => {
-          hockeyApi.getMatchGoals(match.id).then(setGoals);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'hockey_saves',
-          filter: `match_id=eq.${match.id}`,
-        },
-        () => {
-          hockeyApi.getMatchSaves(match.id).then(setSaves);
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            loadMatch();
+          }
         }
       )
       .subscribe();
@@ -93,17 +110,25 @@ const MatchSpectator: React.FC = () => {
   }, [match?.id]);
 
   useEffect(() => {
-    if (goals.length > 0) {
+    if (isInitialLoad.current) return;
+    if (goals.length > previousGoalsLength.current) {
       const lastGoal = goals[goals.length - 1];
-      setVisibleEvent('goal');
+      setVisibleEvent(lastGoal.team === 'team1' ? 'goal' : 'rival_goal');
       setEventTeam(lastGoal.team);
+      setLastGoalInfo({
+        player_name: lastGoal.player_name,
+        dorsal: lastGoal.dorsal,
+        quarter: lastGoal.quarter
+      });
       const timer = setTimeout(() => setVisibleEvent(null), 3000);
       return () => clearTimeout(timer);
     }
-  }, [goals.length]);
+    previousGoalsLength.current = goals.length;
+  }, [goals.length, isInitialLoad.current]);
 
   useEffect(() => {
-    if (saves.length > 0) {
+    if (isInitialLoad.current) return;
+    if (saves.length > previousSavesLength.current) {
       const lastSave = saves[saves.length - 1];
       if (!visibleEvent) {
         setVisibleEvent('save');
@@ -112,7 +137,8 @@ const MatchSpectator: React.FC = () => {
         return () => clearTimeout(timer);
       }
     }
-  }, [saves.length]);
+    previousSavesLength.current = saves.length;
+  }, [saves.length, isInitialLoad.current]);
 
   const loadMatch = async () => {
     try {
@@ -126,6 +152,49 @@ const MatchSpectator: React.FC = () => {
       setMatch(matchData);
       setDisplayTime(matchData.remaining_time);
 
+      // Cargar logos de equipos/clubes
+      const [teamsData, clubsData] = await Promise.all([
+        teamsApi.getTeams(),
+        clubsApi.getClubs()
+      ]);
+      
+      // Buscar logo y categoría del equipo 1
+      let logo1 = matchData.team1_logo_url || '';
+      let category1 = '';
+      
+      // Obtener categoría desde el evento vinculado
+      if (matchData.event_id) {
+        const eventData = await eventsApi.getEvent(matchData.event_id);
+        if (eventData?.team) {
+          category1 = eventData.team.name; // Nombre del equipo (ej: Cadete Femenina)
+          // Obtener logo desde el club del equipo
+          if (eventData.team.club?.logo_url) {
+            logo1 = eventData.team.club.logo_url;
+          }
+        }
+      }
+      
+      // Fallback: buscar por nombre de club si no hay evento
+      if (!logo1 || !category1) {
+        const club1 = clubsData.find(c => c.name === matchData.team1_name);
+        if (club1?.logo_url) logo1 = club1.logo_url;
+        // Si no tenemos categoría del equipo, usar el nombre del club
+        if (!category1) category1 = matchData.team1_name;
+      }
+      
+      // Equipo 2 (rival) - usar nombre directo
+      let logo2 = matchData.team2_logo_url || '';
+      if (!logo2) {
+        const club2 = clubsData.find(c => c.name === matchData.team2_name);
+        logo2 = club2?.logo_url || '';
+      }
+      const category2 = matchData.team2_name; // El rival se muestra por su nombre de club
+      
+      setTeam1Logo(logo1);
+      setTeam2Logo(logo2);
+      setTeam1Category(category1);
+      setTeam2Category(category2);
+
       const [goalsData, savesData] = await Promise.all([
         hockeyApi.getMatchGoals(matchData.id),
         hockeyApi.getMatchSaves(matchData.id),
@@ -133,6 +202,9 @@ const MatchSpectator: React.FC = () => {
       
       setGoals(goalsData);
       setSaves(savesData);
+      isInitialLoad.current = false;
+      previousGoalsLength.current = goalsData.length;
+      previousSavesLength.current = savesData.length;
     } catch (error) {
       console.error('Error loading match:', error);
     } finally {
@@ -181,6 +253,13 @@ const MatchSpectator: React.FC = () => {
     event.target.playVideo();
   };
 
+  const handleVideoEnd = (event: any) => {
+    if (playerRef.current) {
+      playerRef.current.seekTo(0);
+      playerRef.current.playVideo();
+    }
+  };
+
   const youtubeOpts = {
     playerVars: {
       autoplay: 1,
@@ -191,6 +270,8 @@ const MatchSpectator: React.FC = () => {
       showinfo: 0,
       disablekb: 1,
       fs: 0,
+      iv_load_policy: 3,
+      playsinline: 1,
     },
   };
 
@@ -214,16 +295,31 @@ const MatchSpectator: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-4">
+      <style>{`
+        .youtube-embed iframe {
+          border-radius: 12px;
+        }
+        .youtube-embed .ytp-chrome-top,
+        .youtube-embed .ytp-chrome-bottom,
+        .youtube-embed .ytp-gradient-top,
+        .youtube-embed .ytp-gradient-bottom,
+        .youtube-embed .ytp-pause-overlay {
+          display: none !important;
+          opacity: 0 !important;
+        }
+      `}</style>
       {/* YouTube Embed */}
       {match.youtube_url && getYouTubeVideoId(match.youtube_url) && (
         <div className="max-w-4xl mx-auto mb-6 relative">
-          <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-xl bg-black">
+          <div className="relative pb-[56.25%] h-0 overflow-hidden rounded-xl bg-black youtube-embed">
             <YouTube
               videoId={getYouTubeVideoId(match.youtube_url)!}
               opts={youtubeOpts}
               onReady={handlePlayerReady}
+              onEnd={handleVideoEnd}
               className="absolute top-0 left-0 w-full h-full"
               iframeClassName="w-full h-full"
+              style={{ borderRadius: '12px' }}
             />
             <div 
               className="absolute inset-0 z-10 cursor-default"
@@ -273,7 +369,7 @@ const MatchSpectator: React.FC = () => {
         
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-white">
-            {match.team1_name} vs {match.team2_name}
+            {team1Category || match.team1_name}
           </h1>
           <span className={`px-3 py-1 rounded-full text-sm font-bold ${
             isFinished ? 'bg-gray-500' : 
@@ -285,77 +381,79 @@ const MatchSpectator: React.FC = () => {
       </div>
 
       {/* Marcador principal */}
-      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 mb-6">
-        <div className="flex justify-between items-center">
+      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-2xl p-3 md:p-6 border border-white/20 mb-4">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-3 md:gap-2">
           {/* Equipo 1 */}
-          <div className="flex-1 text-center">
+          <div className="flex-1 text-center w-full md:w-auto">
             <div
-              className="w-24 h-24 rounded-full mx-auto mb-3 flex items-center justify-center text-4xl"
+              className="w-16 h-16 md:w-24 md:h-24 rounded-full mx-auto mb-2 flex items-center justify-center overflow-hidden"
               style={{ backgroundColor: match.team1_color + '40' }}
             >
-              {match.team1_logo_url ? (
-                <img src={match.team1_logo_url} alt="logo" className="w-20 h-20 object-contain" />
+              {team1Logo ? (
+                <img src={team1Logo} alt="logo" className="w-14 h-14 md:w-20 md:h-20 object-contain rounded-full" />
               ) : (
-                '🏠'
+                <span className="text-xl md:text-2xl font-bold text-white">{match.team1_name.substring(0, 2).toUpperCase()}</span>
               )}
             </div>
-            <h3 className="text-xl font-bold text-white">{match.team1_name}</h3>
-            <div className="text-7xl font-bold text-white my-4">{match.score_team1}</div>
+            <h3 className="text-base md:text-xl font-bold text-white truncate max-w-full px-2">{match.team1_name}</h3>
+            <div className="text-4xl md:text-7xl font-bold text-white my-2">{match.score_team1}</div>
           </div>
 
           {/* Tiempo */}
-          <div className="text-center px-6">
-            <div className="text-sm text-gray-400 mb-2">CUARTO</div>
-            <div className="text-5xl font-bold text-white mb-2">{match.quarter}/4</div>
-            <div className="text-7xl font-mono font-bold text-yellow-400">{formatTime(displayTime)}</div>
+          <div className="text-center px-2 md:px-6 order-first md:order-none">
+            <div className="text-xs md:text-sm text-gray-400 mb-1">CUARTO</div>
+            <div className="text-2xl md:text-5xl font-bold text-white mb-1">{match.quarter}/4</div>
+            <div className="text-3xl md:text-7xl font-mono font-bold text-yellow-400">{formatTime(displayTime)}</div>
           </div>
 
           {/* Equipo 2 */}
-          <div className="flex-1 text-center">
+          <div className="flex-1 text-center w-full md:w-auto">
             <div
-              className="w-24 h-24 rounded-full mx-auto mb-3 flex items-center justify-center text-4xl"
+              className="w-16 h-16 md:w-24 md:h-24 rounded-full mx-auto mb-2 flex items-center justify-center overflow-hidden"
               style={{ backgroundColor: match.team2_color + '40' }}
             >
-              {match.team2_logo_url ? (
-                <img src={match.team2_logo_url} alt="logo" className="w-20 h-20 object-contain" />
+              {team2Logo ? (
+                <img src={team2Logo} alt="logo" className="w-14 h-14 md:w-20 md:h-20 object-contain rounded-full" />
               ) : (
-                '✈️'
+                <span className="text-xl md:text-2xl font-bold text-white">{match.team2_name.substring(0, 2).toUpperCase()}</span>
               )}
             </div>
-            <h3 className="text-xl font-bold text-white">{match.team2_name}</h3>
-            <div className="text-7xl font-bold text-white my-4">{match.score_team2}</div>
+            <h3 className="text-base md:text-xl font-bold text-white truncate max-w-full px-2">{match.team2_name}</h3>
+            <div className="text-4xl md:text-7xl font-bold text-white my-2">{match.score_team2}</div>
           </div>
         </div>
       </div>
 
       {/* Sponsor text */}
       {match.sponsor_text && (
-        <div className="max-w-4xl mx-auto text-center mb-6">
-          <p className="text-gray-400 text-lg">{match.sponsor_text}</p>
+        <div className="max-w-4xl mx-auto text-center mb-4 md:mb-6">
+          <p className="text-gray-400 text-sm md:text-lg">{match.sponsor_text}</p>
         </div>
       )}
 
       {/* Historial de goles */}
-      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-        <h3 className="text-white font-bold mb-3">⚽ Goles ({goals.length})</h3>
-        <div className="space-y-2 max-h-48 overflow-y-auto">
+      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-white/20 mb-2">
+        <h3 className="text-white font-bold mb-2 text-sm md:text-base">🏑 Goles ({goals.length})</h3>
+        <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
           {goals.length === 0 ? (
-            <p className="text-gray-400 text-sm">No hay goles todavía</p>
+            <p className="text-gray-400 text-xs md:text-sm">Sin goles registrados</p>
           ) : (
             goals.map(goal => (
-              <div key={goal.id} className="flex items-center justify-between bg-white/5 p-2 rounded">
-                <div className="flex items-center gap-3">
-                  <span className="text-yellow-400 font-bold">Q{goal.quarter}'</span>
+              <div key={goal.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-yellow-400 font-bold text-xs md:text-sm whitespace-nowrap">
+                    Q{goal.quarter} - {goal.match_minute}'
+                  </span>
                   <span
-                    className="px-2 py-1 rounded text-sm font-bold"
+                    className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
                     style={{ 
                       backgroundColor: goal.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
                       color: goal.team === 'team1' ? match.team1_color : match.team2_color
                     }}
                   >
-                    {goal.team === 'team1' ? match.team1_name.slice(0, 10) : match.team2_name.slice(0, 10)}
+                    {goal.team === 'team1' ? match.team1_name : match.team2_name}
                   </span>
-                  <span className="text-white">
+                  <span className="text-white text-xs md:text-sm">
                     {goal.player_name} {goal.dorsal && `#${goal.dorsal}`}
                   </span>
                 </div>
@@ -366,54 +464,66 @@ const MatchSpectator: React.FC = () => {
       </div>
 
       {/* Paradas */}
-      <div className="max-w-4xl mx-auto mt-4 bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
-        <h3 className="text-white font-bold mb-3">🧤 Paradas ({saves.length})</h3>
-        <p className="text-gray-400 text-sm">
-          {saves.length > 0 
-            ? `El portero ha realizado ${saves.length} parada${saves.length > 1 ? 's' : ''}`
-            : 'No hay paradas registradas'
-          }
-        </p>
+      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-white/20">
+        <h3 className="text-white font-bold mb-2 text-sm md:text-base">🧤 Paradas ({saves.length})</h3>
+        {saves.length > 0 ? (
+          <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
+            {saves.map(save => (
+              <div key={save.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-blue-400 font-bold text-xs md:text-sm whitespace-nowrap">
+                    Q{save.quarter} - {save.match_minute}'
+                  </span>
+                  <span className="text-white text-xs md:text-sm">
+                    {save.player_name || 'Portero'} {save.dorsal && `#${save.dorsal}`}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-400 text-xs md:text-sm">Sin paradas registradas</p>
+        )}
       </div>
 
-      {/* Animación de gol equipo 1 */}
-      {visibleEvent === 'goal' && eventTeam === 'team1' && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-          <div className="text-7xl font-extrabold text-yellow-400 drop-shadow-xl animate-wiggle">
-            🎉🏑 ¡GOOOOOL! 🏑🎉
-          </div>
-        </div>
-      )}
+      {/* Overlay de eventos animados */}
+      <MatchEventOverlay
+        event={visibleEvent}
+        eventTeam={eventTeam}
+        match={match}
+        onFinish={() => setVisibleEvent(null)}
+      />
 
-      {/* Animación de gol equipo 2 */}
-      {visibleEvent === 'goal' && eventTeam === 'team2' && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-          <div className="text-6xl font-extrabold text-white drop-shadow-xl text-center">
-            <div className="text-5xl">😭⚽ ¡Gol del rival! 😭</div>
-          </div>
-        </div>
-      )}
+      {/* Reacciones flotantes */}
+      <FloatingReactions ref={floatingReactionsRef} matchId={match?.id || ''} />
 
-      {/* Animación de parada */}
-      {visibleEvent === 'save' && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
-          <div className="text-6xl font-extrabold text-blue-300 drop-shadow-xl animate-wiggle text-center">
-            🧤 ¡QUE ATAJADA!
-          </div>
-        </div>
-      )}
-
-      {/* Estilos de animación */}
-      <style>{`
-        @keyframes wiggle {
-          0% { transform: translateX(0) rotate(0deg); }
-          25% { transform: translateX(-8px) rotate(-6deg); }
-          50% { transform: translateX(8px) rotate(6deg); }
-          75% { transform: translateX(-4px) rotate(-3deg); }
-          100% { transform: translateX(0) rotate(0deg); }
-        }
-        .animate-wiggle { animation: wiggle 0.9s ease-in-out both; }
-      `}</style>
+      {/* Botones de reacción */}
+      <div className="fixed bottom-4 left-4 flex gap-2 z-50">
+        <button
+          onClick={() => sendReaction('clap')}
+          className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white p-3 rounded-full text-2xl transition-all"
+        >
+          👏
+        </button>
+        <button
+          onClick={() => sendReaction('heart')}
+          className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white p-3 rounded-full text-2xl transition-all"
+        >
+          ❤️
+        </button>
+        <button
+          onClick={() => sendReaction('fire')}
+          className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white p-3 rounded-full text-2xl transition-all"
+        >
+          🔥
+        </button>
+        <button
+          onClick={() => sendReaction('muscle')}
+          className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white p-3 rounded-full text-2xl transition-all"
+        >
+          💪
+        </button>
+      </div>
     </div>
   );
 };

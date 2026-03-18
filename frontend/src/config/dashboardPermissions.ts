@@ -57,7 +57,7 @@ export const DASHBOARD_PERMISSIONS: Record<PermissionKey, UserRole[]> = {
   'charts.financial': ['admin', 'admin_club', 'tesorero'],
   'charts.lotterySellers': ['admin', 'admin_club', 'coordinador', 'tesorero'],
   
-  'sections.nextMatch': ['admin', 'admin_club', 'entrenador', 'coordinador', 'delegado', 'jugador', 'padre'],
+  'sections.nextMatch': ['admin', 'admin_club', 'entrenador', 'coordinador', 'delegado'],
   'sections.recentEvents': ['admin', 'admin_club', 'entrenador', 'coordinador', 'delegado'],
   'sections.teams': ['admin', 'admin_club', 'entrenador', 'coordinador'],
   'sections.birthdays': ['admin', 'admin_club', 'entrenador', 'coordinador'],

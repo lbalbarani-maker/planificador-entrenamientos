@@ -23,6 +23,8 @@ export interface HockeyMatch {
   created_at: string;
   updated_at: string;
   start_time?: number | null;
+  location?: string;
+  location_link?: string;
 }
 
 export interface HockeyPlayer {
@@ -53,8 +55,11 @@ export interface HockeySave {
   id: string;
   match_id: string;
   team: 'team1' | 'team2';
+  player_id?: string;
   player_name?: string;
+  dorsal?: string;
   quarter: number;
+  elapsed_in_quarter?: number;
   match_minute: number;
   timestamp: string;
 }
@@ -78,6 +83,7 @@ export interface CreateMatchInput {
   sponsor_text?: string;
   youtube_url?: string;
   admin_pin?: string;
+  event_id?: string;
 }
 
 export interface UpdateMatchInput {
@@ -94,6 +100,23 @@ export interface UpdateMatchInput {
   start_time?: number | null;
 }
 
+export interface EditMatchInput {
+  team1_name?: string;
+  team1_color?: string;
+  team1_logo_url?: string;
+  team2_name?: string;
+  team2_color?: string;
+  team2_logo_url?: string;
+  quarter_duration?: number;
+  youtube_url?: string;
+  sponsor_logo_url?: string;
+  sponsor_name?: string;
+  sponsor_text?: string;
+  location?: string;
+  location_link?: string;
+  admin_pin?: string;
+}
+
 export interface AddGoalInput {
   team: 'team1' | 'team2';
   player_id?: string;
@@ -107,8 +130,11 @@ export interface AddGoalInput {
 
 export interface AddSaveInput {
   team: 'team1' | 'team2';
+  player_id?: string;
   player_name?: string;
+  dorsal?: string;
   quarter: number;
+  elapsed_in_quarter?: number;
   match_minute: number;
 }
 
