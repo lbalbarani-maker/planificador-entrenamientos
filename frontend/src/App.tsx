@@ -25,6 +25,7 @@ import TournamentDetail from './components/Tournaments/TournamentDetail';
 import { NotificationSettingsPage } from './pages/NotificationSettings';
 import { AdminPushPage } from './pages/AdminPush';
 import { OfflineBanner } from './components/notifications/OfflineBanner';
+import { InstallPromptBanner } from './components/notifications/InstallPromptBanner';
 import './App.css';
 
 const hasRole = (roleString: string | undefined, role: string): boolean => {
@@ -80,6 +81,7 @@ function App() {
   return (
     <Router>
       <OfflineBanner />
+      <InstallPromptBanner />
       <Routes>
         {/* Rutas públicas */}
         <Route path="/training/:shareId" element={<PublicTraining />} />

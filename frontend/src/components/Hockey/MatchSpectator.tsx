@@ -35,16 +35,24 @@ const MatchSpectator: React.FC = () => {
   const sendReaction = async (type: string) => {
     if (!match?.id) return;
     
+    console.log("📤 Sending reaction:", type, "for match:", match.id);
+    
     // Mostrar reacción local inmediatamente
     floatingReactionsRef.current?.addReaction(type);
     
     try {
-      await supabase.from("match_reactions").insert({
+      const { data, error } = await supabase.from("match_reactions").insert({
         match_id: match.id,
         type,
       });
+      
+      if (error) {
+        console.error("❌ Error sending reaction:", error);
+      } else {
+        console.log("✅ Reaction saved to DB:", type, data);
+      }
     } catch (error) {
-      console.error("Error sending reaction:", error);
+      console.error("❌ Error sending reaction:", error);
     }
   };
 

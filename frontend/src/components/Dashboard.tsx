@@ -242,7 +242,7 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center gap-3">
               <img src="/images/logosanse2.png" alt="Logo" className="w-10 h-10 object-contain" />
               <div>
-                <h1 className="font-bold text-sanse-blue text-sm">Club OS</h1>
+                <h1 className="font-bold text-sanse-blue text-sm">Club Sanse Complutense</h1>
                 <p className="text-xs text-gray-500">{user.fullName}</p>
               </div>
             </div>
@@ -307,7 +307,7 @@ const Dashboard: React.FC = () => {
           </button>
           <div className="flex items-center gap-2">
             <img src="/images/logosanse2.png" alt="Logo" className="w-8 h-8 object-contain" />
-            <span className="font-bold text-sanse-blue">Club OS</span>
+            <span className="font-bold text-sanse-blue">Club Sanse Complutense</span>
           </div>
           <div className="w-10" />
         </header>

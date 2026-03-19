@@ -274,7 +274,7 @@ const Login: React.FC = () => {
               Sanse Complutense
             </h2>
             <p className="text-center text-gray-600">
-              Hockey Club OS
+              Hockey Club Sanse Complutense
             </p>
           </div>
         </div>

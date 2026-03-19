@@ -249,16 +249,16 @@ const MatchList: React.FC = () => {
     if (logoUrl) {
       return (
         <div 
-          className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center"
+          className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: color + '20' }}
         >
-          <img src={logoUrl} alt={teamName} className="w-10 h-10 object-contain" />
+          <img src={logoUrl} alt={teamName} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
         </div>
       );
     }
     return (
       <div 
-        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
+        className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-bold text-xs sm:text-sm flex-shrink-0"
         style={{ backgroundColor: color }}
       >
         {teamName.substring(0, 2).toUpperCase()}
@@ -280,20 +280,20 @@ const MatchList: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100 p-3 sm:p-6 overflow-x-hidden">
       <div className="max-w-4xl mx-auto">
         <BackButton />
         
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4 sm:mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-sanse-blue">🏑 Partidos</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-sanse-blue">🏑 Partidos</h1>
           </div>
         </div>
 
         {/* Próximos Partidos */}
-        <div className="bg-white rounded-2xl shadow-md p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-6">📅 Próximos Partidos</h2>
+        <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 mb-6">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 sm:mb-6">📅 Próximos Partidos</h2>
 
           {upcomingMatches.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
@@ -304,62 +304,66 @@ const MatchList: React.FC = () => {
               {upcomingMatches.map((match) => (
                 <div
                   key={match.id}
-                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:bg-gray-100 transition-colors"
+                  className="bg-gray-50 rounded-xl p-3 sm:p-4 border border-gray-200 hover:bg-gray-100 transition-colors"
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className="flex items-center gap-3 mb-1">
-                          <TeamLogo logoUrl={getTeamLogo(match, 'team1')} teamName={match.team1_name} color={match.team1_color} />
-                          <span
-                            className="px-3 py-1 rounded-full text-sm font-bold"
-                            style={{ backgroundColor: match.team1_color + '20', color: match.team1_color }}
-                          >
-                            {match.team1_name}
-                          </span>
-                          <span className="text-gray-800 font-bold text-xl">vs</span>
-                          <span
-                            className="px-3 py-1 rounded-full text-sm font-bold"
-                            style={{ backgroundColor: match.team2_color + '20', color: match.team2_color }}
-                          >
-                            {match.team2_name}
-                          </span>
-                          <TeamLogo logoUrl={getTeamLogo(match, 'team2')} teamName={match.team2_name} color={match.team2_color} />
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span>{getStatusBadge(match.status)}</span>
-                          <span className="font-bold text-sanse-blue">
-                            {match.score_team1} - {match.score_team2}
-                          </span>
-                          <span>Cuarto: {match.quarter}/4</span>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          {formatDate(match.eventDate || match.created_at)}
-                        </div>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <TeamLogo logoUrl={getTeamLogo(match, 'team1')} teamName={match.team1_name} color={match.team1_color} />
+                        <span
+                          className="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold truncate max-w-[80px] sm:max-w-[120px]"
+                          style={{ backgroundColor: match.team1_color + '20', color: match.team1_color }}
+                        >
+                          {match.team1_name}
+                        </span>
+                        <span className="text-gray-800 font-bold text-base sm:text-xl flex-shrink-0">vs</span>
+                        <span
+                          className="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold truncate max-w-[80px] sm:max-w-[120px]"
+                          style={{ backgroundColor: match.team2_color + '20', color: match.team2_color }}
+                        >
+                          {match.team2_name}
+                        </span>
+                        <TeamLogo logoUrl={getTeamLogo(match, 'team2')} teamName={match.team2_name} color={match.team2_color} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
+                        <span>{getStatusBadge(match.status)}</span>
+                        <span className="font-bold text-sanse-blue">
+                          {match.score_team1} - {match.score_team2}
+                        </span>
+                        <span className="hidden sm:inline">Cuarto: {match.quarter}/4</span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {formatDate(match.eventDate || match.created_at)}
                       </div>
                     </div>
-                    <div className="flex gap-2 ml-4">
+                    <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                       {isAdmin && (
                         <>
                           <button
                             onClick={() => navigate(`/match/${match.id}`)}
-                            className="bg-sanse-blue text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm"
+                            className="w-8 h-8 sm:w-auto sm:h-auto sm:px-2 sm:py-1.5 bg-sanse-blue text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm flex items-center justify-center gap-1"
+                            title="Admin"
                           >
-                            ⚙️ Admin
+                            <span>⚙️</span>
+                            <span className="hidden sm:inline">Admin</span>
                           </button>
                           <button
                             onClick={() => openEditModal(match)}
-                            className="bg-yellow-600 text-white px-3 py-2 rounded-lg hover:bg-yellow-700 text-sm"
+                            className="w-8 h-8 sm:w-auto sm:h-auto sm:px-2 sm:py-1.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-xs sm:text-sm flex items-center justify-center gap-1"
+                            title="Editar"
                           >
-                            ✏️ Editar
+                            <span>✏️</span>
+                            <span className="hidden sm:inline">Editar</span>
                           </button>
                         </>
                       )}
                       <button
                         onClick={() => handleShareAndOpen(match.share_token)}
-                        className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm"
+                        className="w-8 h-8 sm:w-auto sm:h-auto sm:px-2 sm:py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs sm:text-sm flex items-center justify-center gap-1"
+                        title="Ver"
                       >
-                        👁️ Ver
+                        <span>👁️</span>
+                        <span className="hidden sm:inline">Ver</span>
                       </button>
                     </div>
                   </div>
@@ -370,8 +374,8 @@ const MatchList: React.FC = () => {
         </div>
 
         {/* Partidos Finalizados */}
-        <div className="bg-white rounded-2xl shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-6">📋 Partidos Finalizados</h2>
+        <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 sm:mb-6">📋 Partidos Finalizados</h2>
 
           {finishedMatches.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
@@ -382,61 +386,65 @@ const MatchList: React.FC = () => {
               {finishedMatches.map((match) => (
                 <div
                   key={match.id}
-                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:bg-gray-100 transition-colors"
+                  className="bg-gray-50 rounded-xl p-3 sm:p-4 border border-gray-200 hover:bg-gray-100 transition-colors"
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className="flex items-center gap-3 mb-1">
-                          <TeamLogo logoUrl={getTeamLogo(match, 'team1')} teamName={match.team1_name} color={match.team1_color} />
-                          <span
-                            className="px-3 py-1 rounded-full text-sm font-bold"
-                            style={{ backgroundColor: match.team1_color + '20', color: match.team1_color }}
-                          >
-                            {match.team1_name}
-                          </span>
-                          <span className="text-gray-800 font-bold text-xl">vs</span>
-                          <span
-                            className="px-3 py-1 rounded-full text-sm font-bold"
-                            style={{ backgroundColor: match.team2_color + '20', color: match.team2_color }}
-                          >
-                            {match.team2_name}
-                          </span>
-                          <TeamLogo logoUrl={getTeamLogo(match, 'team2')} teamName={match.team2_name} color={match.team2_color} />
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span>{getStatusBadge(match.status)}</span>
-                          <span className="font-bold text-sanse-blue">
-                            {match.score_team1} - {match.score_team2}
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          {formatDate(match.eventDate || match.created_at)}
-                        </div>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <TeamLogo logoUrl={getTeamLogo(match, 'team1')} teamName={match.team1_name} color={match.team1_color} />
+                        <span
+                          className="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold truncate max-w-[80px] sm:max-w-[120px]"
+                          style={{ backgroundColor: match.team1_color + '20', color: match.team1_color }}
+                        >
+                          {match.team1_name}
+                        </span>
+                        <span className="text-gray-800 font-bold text-base sm:text-xl flex-shrink-0">vs</span>
+                        <span
+                          className="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-bold truncate max-w-[80px] sm:max-w-[120px]"
+                          style={{ backgroundColor: match.team2_color + '20', color: match.team2_color }}
+                        >
+                          {match.team2_name}
+                        </span>
+                        <TeamLogo logoUrl={getTeamLogo(match, 'team2')} teamName={match.team2_name} color={match.team2_color} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
+                        <span>{getStatusBadge(match.status)}</span>
+                        <span className="font-bold text-sanse-blue">
+                          {match.score_team1} - {match.score_team2}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {formatDate(match.eventDate || match.created_at)}
                       </div>
                     </div>
-                    <div className="flex gap-2 ml-4">
+                    <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                       {isAdmin && (
                         <>
                           <button
                             onClick={() => navigate(`/match/${match.id}`)}
-                            className="bg-sanse-blue text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm"
+                            className="w-8 h-8 sm:w-auto sm:h-auto sm:px-2 sm:py-1.5 bg-sanse-blue text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm flex items-center justify-center gap-1"
+                            title="Admin"
                           >
-                            ⚙️ Admin
+                            <span>⚙️</span>
+                            <span className="hidden sm:inline">Admin</span>
                           </button>
                           <button
                             onClick={() => openEditModal(match)}
-                            className="bg-yellow-600 text-white px-3 py-2 rounded-lg hover:bg-yellow-700 text-sm"
+                            className="w-8 h-8 sm:w-auto sm:h-auto sm:px-2 sm:py-1.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-xs sm:text-sm flex items-center justify-center gap-1"
+                            title="Editar"
                           >
-                            ✏️ Editar
+                            <span>✏️</span>
+                            <span className="hidden sm:inline">Editar</span>
                           </button>
                         </>
                       )}
                       <button
                         onClick={() => handleShareAndOpen(match.share_token)}
-                        className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm"
+                        className="w-8 h-8 sm:w-auto sm:h-auto sm:px-2 sm:py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs sm:text-sm flex items-center justify-center gap-1"
+                        title="Ver"
                       >
-                        👁️ Ver
+                        <span>👁️</span>
+                        <span className="hidden sm:inline">Ver</span>
                       </button>
                     </div>
                   </div>
