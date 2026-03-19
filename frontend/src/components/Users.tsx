@@ -109,30 +109,91 @@ const handleCreateUser = async (e: React.FormEvent) => {
     
     try {
       const roleString = formData.roles.join(',');
-      const newUser = await usersApi.createUser({
-        email: formData.email,
-        full_name: formData.full_name,
-        password: formData.password || 'default123',
-        role: roleString,
-        is_active: true,
-        club_id: null,
-        is_super_admin: false,
-        is_club_admin: false
-      });
+      const isParentRole = formData.roles.includes('padre');
       
-      // Guardar relaciones si hay jugador o equipo seleccionado
-      if (formData.playerIds.length > 0 || formData.teamIds.length > 0) {
-        await usersApi.updateUserRelations(newUser.id, formData.playerIds, formData.teamIds);
+      let userId: string;
+      let newUser: User | null = null;
+      
+      if (isParentRole) {
+        const { data: existingUser } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', formData.email.toLowerCase())
+          .single();
+        
+        if (existingUser) {
+          userId = existingUser.id;
+          await usersApi.updateUser(userId, { role: roleString, is_active: true });
+        } else {
+          newUser = await usersApi.createUser({
+            email: formData.email,
+            full_name: formData.full_name,
+            password: formData.password || 'default123',
+            role: roleString,
+            is_active: true,
+            club_id: null,
+            is_super_admin: false,
+            is_club_admin: false
+          });
+          userId = newUser.id;
+        }
+      } else {
+        newUser = await usersApi.createUser({
+          email: formData.email,
+          full_name: formData.full_name,
+          password: formData.password || 'default123',
+          role: roleString,
+          is_active: true,
+          club_id: null,
+          is_super_admin: false,
+          is_club_admin: false
+        });
+        userId = newUser.id;
       }
       
-      setUsers([...users, newUser]);
+      if (isParentRole && formData.playerIds.length > 0) {
+        const { data: existingParents } = await supabase
+          .from('parents')
+          .select('id, player_id, parent_number')
+          .eq('email', formData.email.toLowerCase());
+        
+        for (const playerId of formData.playerIds) {
+          const existingForPlayer = existingParents?.find(p => p.player_id === playerId);
+          if (!existingForPlayer) {
+            const usedNumbers = existingParents?.filter(p => p.player_id === playerId).map(p => p.parent_number) || [];
+            const nextNumber = usedNumbers.includes(1) ? 2 : 1;
+            
+            await supabase.from('parents').insert({
+              player_id: playerId,
+              parent_number: nextNumber,
+              full_name: formData.full_name,
+              email: formData.email.toLowerCase()
+            });
+          }
+        }
+      }
+      
+      if (formData.playerIds.length > 0 && !isParentRole) {
+        await usersApi.updateUserRelations(userId, formData.playerIds, formData.teamIds);
+      }
+      
+      if (formData.teamIds.length > 0) {
+        await usersApi.updateUserRelations(userId, [], formData.teamIds);
+      }
+      
+      const refreshedUsers = await usersApi.getUsers();
+      setUsers(refreshedUsers);
       setShowForm(false);
       setFormData({ email: '', full_name: '', password: '', roles: [], playerIds: [], teamIds: [] });
-      setSuccessMessage('Usuario creado exitosamente!');
+      setSuccessMessage(newUser ? 'Usuario creado exitosamente!' : 'Usuario actualizado y vinculado exitosamente!');
       setShowSuccessModal(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating user:', error);
-      setSuccessMessage('Error al crear el usuario');
+      if (error?.code === '23505') {
+        setSuccessMessage('Error: Este email ya está registrado. Usa otro email o edita el usuario existente.');
+      } else {
+        setSuccessMessage('Error al crear el usuario');
+      }
       setShowSuccessModal(true);
     } finally {
       setLoading(false);
@@ -142,15 +203,23 @@ const handleCreateUser = async (e: React.FormEvent) => {
 const handleEditUser = async (user: User) => {
     setEditingUser(user);
     const userRoles = user.role ? user.role.split(',') : [];
+    const isParentRole = userRoles.includes('padre');
     
-    // Cargar relaciones existentes
     let playerIds: string[] = [];
     let teamIds: string[] = [];
     
     try {
-      const relations = await usersApi.getUserRelations(user.id);
-      playerIds = relations.filter(r => r.relation_type === 'player').map(r => r.relation_id);
-      teamIds = relations.filter(r => r.relation_type === 'team').map(r => r.relation_id);
+      if (isParentRole) {
+        const { data: parentsData } = await supabase
+          .from('parents')
+          .select('player_id')
+          .eq('email', user.email.toLowerCase());
+        playerIds = parentsData?.map(p => p.player_id) || [];
+      } else {
+        const relations = await usersApi.getUserRelations(user.id);
+        playerIds = relations.filter(r => r.relation_type === 'player').map(r => r.relation_id);
+        teamIds = relations.filter(r => r.relation_type === 'team').map(r => r.relation_id);
+      }
     } catch (error) {
       console.error('Error loading user relations:', error);
     }
@@ -174,21 +243,59 @@ const handleUpdateUser = async (e: React.FormEvent) => {
     
     try {
       const roleString = formData.roles.join(',');
+      const isParentRole = formData.roles.includes('padre');
       const updates: any = {
         email: formData.email,
         full_name: formData.full_name,
         role: roleString
       };
       
-      // Solo actualizar password si se ingresó una nueva
       if (formData.password) {
         updates.password = formData.password;
       }
       
       const updatedUser = await usersApi.updateUser(editingUser.id, updates);
       
-      // Actualizar relaciones
-      await usersApi.updateUserRelations(editingUser.id, formData.playerIds, formData.teamIds);
+      if (isParentRole && formData.playerIds.length > 0) {
+        const { data: existingParents } = await supabase
+          .from('parents')
+          .select('id, player_id, parent_number')
+          .eq('email', editingUser.email.toLowerCase());
+        
+        for (const playerId of formData.playerIds) {
+          const existingForPlayer = existingParents?.find(p => p.player_id === playerId);
+          if (!existingForPlayer) {
+            const usedNumbers = existingParents?.filter(p => p.player_id === playerId).map(p => p.parent_number) || [];
+            const nextNumber = usedNumbers.includes(1) ? 2 : 1;
+            
+            await supabase.from('parents').insert({
+              player_id: playerId,
+              parent_number: nextNumber,
+              full_name: formData.full_name,
+              email: formData.email.toLowerCase()
+            });
+          } else {
+            await supabase
+              .from('parents')
+              .update({ full_name: formData.full_name })
+              .eq('id', existingForPlayer.id);
+          }
+        }
+        
+        const selectedPlayerIds = formData.playerIds;
+        const parentsToRemove = existingParents?.filter(p => !selectedPlayerIds.includes(p.player_id)) || [];
+        for (const parent of parentsToRemove) {
+          await supabase.from('parents').delete().eq('id', parent.id);
+        }
+      }
+      
+      if (formData.playerIds.length > 0 && !isParentRole) {
+        await usersApi.updateUserRelations(editingUser.id, formData.playerIds, formData.teamIds);
+      }
+      
+      if (formData.teamIds.length > 0) {
+        await usersApi.updateUserRelations(editingUser.id, [], formData.teamIds);
+      }
       
       setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
       setShowForm(false);

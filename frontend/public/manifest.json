@@ -1,25 +1,53 @@
 {
-  "short_name": "Club OS",
-  "name": "Club OS - Gestión de Club",
+  "short_name": "Sanse Complu",
+  "name": "Sanse Complu Hockey App",
+  "description": "App de gestión del club de hockey Sanse Complu",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0A1F44",
+  "background_color": "#ffffff",
+  "scope": "/",
   "icons": [
     {
-      "src": "/images/logosanse2.png",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/png"
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/images/logosanse2.png",
+      "src": "/icon-512.png",
+      "sizes": "512x512",
       "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "/images/logosanse2.png",
-      "type": "image/png",
-      "sizes": "512x512"
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#1e40af",
-  "background_color": "#ffffff"
+  "shortcuts": [
+    {
+      "name": "Partidos",
+      "short_name": "Partidos",
+      "description": "Ver partidos del club",
+      "url": "/match",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Convocatorias",
+      "short_name": "Convoca",
+      "description": "Ver convocatorias",
+      "url": "/my-convocations",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "categories": ["sports", "lifestyle"],
+  "screenshots": []
 }

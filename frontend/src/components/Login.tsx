@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usersApi } from '../lib/supabaseUsers';
+import { supabase } from '../lib/supabase';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -105,7 +106,8 @@ const Login: React.FC = () => {
         role: loggedInUser.role,
         fullName: loggedInUser.full_name
       }));
-      
+      await linkPlayerToSession(loggedInUser.id, loggedInUser.role);
+      await linkParentToSession(loggedInUser.email, loggedInUser.role);
       window.location.href = '/';
     } catch (error) {
       console.error('Error setting PIN:', error);
@@ -129,6 +131,8 @@ const Login: React.FC = () => {
           role: user.role,
           fullName: user.full_name
         }));
+        await linkPlayerToSession(user.id, user.role);
+        await linkParentToSession(user.email, user.role);
         window.location.href = '/';
       } else {
         setError('PIN incorrecto');
@@ -153,6 +157,8 @@ const Login: React.FC = () => {
           role: user.role,
           fullName: user.full_name
         }));
+        await linkPlayerToSession(user.id, user.role);
+        await linkParentToSession(user.email, user.role);
         window.location.href = '/';
       } else {
         setError('PIN incorrecto');
@@ -164,6 +170,8 @@ const Login: React.FC = () => {
         role: loggedInUser.role,
         fullName: loggedInUser.full_name
       }));
+      await linkPlayerToSession(loggedInUser.id, loggedInUser.role);
+      await linkParentToSession(loggedInUser.email, loggedInUser.role);
       window.location.href = '/';
     } else {
       setError('PIN incorrecto');
@@ -189,6 +197,65 @@ const Login: React.FC = () => {
       hash = hash & hash;
     }
     return Math.abs(hash).toString(16);
+  };
+
+  const linkPlayerToSession = async (userId: string, role: string) => {
+    if (role?.includes('jugador')) {
+      const { data } = await supabase
+        .from('user_relations')
+        .select('relation_id')
+        .eq('user_id', userId)
+        .eq('relation_type', 'player')
+        .single();
+      
+      if (data?.relation_id) {
+        localStorage.setItem('selectedPlayerId', data.relation_id);
+        const { data: player } = await supabase
+          .from('players')
+          .select('full_name')
+          .eq('id', data.relation_id)
+          .single();
+        if (player) {
+          localStorage.setItem('selectedPlayerName', player.full_name);
+        }
+      }
+    }
+  };
+
+  const linkParentToSession = async (userEmail: string, role: string) => {
+    if (role?.includes('padre')) {
+      const { data: parentsData } = await supabase
+        .from('parents')
+        .select('player_id')
+        .eq('email', userEmail.toLowerCase());
+      
+      if (parentsData && parentsData.length > 0) {
+        const playerIds = parentsData.map(p => p.player_id);
+        
+        localStorage.setItem('parentPlayerIds', JSON.stringify(playerIds));
+        localStorage.setItem('selectedPlayerId', playerIds[0]);
+        
+        const { data: players } = await supabase
+          .from('players')
+          .select('id, full_name')
+          .in('id', playerIds);
+        
+        if (players) {
+          localStorage.setItem('parentPlayers', JSON.stringify(players));
+        }
+      }
+    }
+  };
+
+  const completeLogin = async (user: any) => {
+    localStorage.setItem('user', JSON.stringify({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      fullName: user.full_name
+    }));
+    await linkPlayerToSession(user.id, user.role);
+    window.location.href = '/';
   };
 
   return (

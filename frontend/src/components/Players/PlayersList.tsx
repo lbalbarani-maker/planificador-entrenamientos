@@ -526,6 +526,7 @@ const PlayersList: React.FC = () => {
       const primaryTeamId = formData.primary_team_id || selectedTeams[0] || null;
       let playerId = editingPlayer?.id;
       let createdUserId: string | null = null;
+      let userMessage = '';
       
       if (editingPlayer) {
         // Editar jugador existente
@@ -543,6 +544,86 @@ const PlayersList: React.FC = () => {
           .eq('id', editingPlayer.id);
         
         if (error) throw error;
+
+        // Manejar email del jugador (usuario)
+        const newEmail = formData.player_email?.trim().toLowerCase() || '';
+        
+        // Buscar relación actual del jugador con usuario
+        const { data: currentRelationData } = await supabase
+          .from('user_relations')
+          .select('id, user_id')
+          .eq('relation_type', 'player')
+          .eq('relation_id', editingPlayer.id)
+          .maybeSingle();
+        
+        // Obtener email actual del usuario vinculado si existe
+        let currentUserEmail = '';
+        if (currentRelationData?.user_id) {
+          const { data: currentProfile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('id', currentRelationData.user_id)
+            .maybeSingle();
+          currentUserEmail = currentProfile?.email?.toLowerCase() || '';
+        }
+
+        if (newEmail && newEmail !== currentUserEmail) {
+          // Nuevo email proporcionado o email cambió
+          const { data: existingUser } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', newEmail)
+            .maybeSingle();
+
+          if (currentRelationData?.id) {
+            // Ya tiene un usuario vinculado, actualizarlo
+            if (existingUser && existingUser.id !== currentRelationData.user_id) {
+              // El email ya está usado por otro usuario
+              userMessage = ' (el email ya está registrado por otro usuario)';
+            } else {
+              await supabase.from('profiles').update({ email: newEmail }).eq('id', currentRelationData.user_id);
+              userMessage = ' (usuario actualizado)';
+            }
+          } else {
+            // No tiene usuario vinculado, crear uno nuevo
+            if (existingUser) {
+              // Vincular usuario existente
+              await supabase.from('user_relations').insert({
+                user_id: existingUser.id,
+                relation_type: 'player',
+                relation_id: editingPlayer.id
+              });
+              userMessage = ' (usuario existente vinculado)';
+            } else {
+              // Crear nuevo usuario
+              try {
+                const newUser = await usersApi.createUser({
+                  email: newEmail,
+                  full_name: formData.full_name,
+                  password: 'default123',
+                  role: 'jugador',
+                  is_active: true,
+                  club_id: formData.club_id || null,
+                  is_super_admin: false,
+                  is_club_admin: false
+                });
+                await supabase.from('user_relations').insert({
+                  user_id: newUser.id,
+                  relation_type: 'player',
+                  relation_id: editingPlayer.id
+                });
+                userMessage = ' (usuario creado)';
+              } catch (userError) {
+                console.error('Error creating user:', userError);
+                userMessage = ' (error al crear usuario)';
+              }
+            }
+          }
+        } else if (!newEmail && currentRelationData?.id) {
+          // Se eliminó el email, desvincular usuario
+          await supabase.from('user_relations').delete().eq('id', currentRelationData.id);
+          userMessage = ' (usuario desvinculado)';
+        }
       } else {
         // Crear nuevo jugador
         const { data: newPlayer, error } = await supabase
@@ -685,9 +766,12 @@ const PlayersList: React.FC = () => {
       await loadData();
       setShowEditModal(false);
       setEditingPlayer(null);
-      setSuccessMessage(editingPlayer ? 'Jugador actualizado correctamente' : 'Jugador creado correctamente');
+      const successMsg = editingPlayer 
+        ? `Jugador actualizado correctamente${userMessage}`
+        : 'Jugador creado correctamente';
+      setSuccessMessage(successMsg);
       setShowSuccessModal(true);
-      setTimeout(() => setShowSuccessModal(false), 2000);
+      setTimeout(() => setShowSuccessModal(false), 3000);
     } catch (error) {
       console.error('Error saving player:', error);
       setSuccessMessage('Error al guardar el jugador');
@@ -1260,6 +1344,11 @@ const PlayersList: React.FC = () => {
                   {viewingPlayer.position && (
                     <p className="text-gray-600 mt-1 font-medium">
                       {viewingPlayer.position === 'Portero' || viewingPlayer.position === 'Portera' ? '🥅 ' : ''}{viewingPlayer.position}
+                    </p>
+                  )}
+                  {viewingPlayer.player_email && (
+                    <p className="text-blue-600 mt-1 text-sm">
+                      📧 {viewingPlayer.player_email}
                     </p>
                   )}
                 </div>

@@ -22,6 +22,9 @@ import LotterySales from './components/Lotteries/LotterySales';
 import LotteryPublic from './components/Lotteries/LotteryPublic';
 import TournamentsList from './components/Tournaments/TournamentsList';
 import TournamentDetail from './components/Tournaments/TournamentDetail';
+import { NotificationSettingsPage } from './pages/NotificationSettings';
+import { AdminPushPage } from './pages/AdminPush';
+import { OfflineBanner } from './components/notifications/OfflineBanner';
 import './App.css';
 
 const hasRole = (roleString: string | undefined, role: string): boolean => {
@@ -76,6 +79,7 @@ function App() {
 
   return (
     <Router>
+      <OfflineBanner />
       <Routes>
         {/* Rutas públicas */}
         <Route path="/training/:shareId" element={<PublicTraining />} />
@@ -113,6 +117,10 @@ function App() {
         {/* Rutas de Torneos */}
         <Route path="/tournaments" element={user ? <TournamentsList /> : <Navigate to="/login" replace />} />
         <Route path="/tournaments/:id" element={user ? <TournamentDetail /> : <Navigate to="/login" replace />} />
+        
+        {/* Rutas de Notificaciones */}
+        <Route path="/settings/notifications" element={user ? <NotificationSettingsPage /> : <Navigate to="/login" replace />} />
+        <Route path="/admin/push" element={user && hasRole(user.role, 'admin') ? <AdminPushPage /> : <Navigate to="/dashboard" replace />} />
         
         {/* Ruta pública de lotería para jugadores */}
         <Route path="/lottery/:lotteryId/player/:playerId" element={<LotteryPublic />} />

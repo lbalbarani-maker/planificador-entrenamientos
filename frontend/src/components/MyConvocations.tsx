@@ -15,7 +15,16 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
   const [teams, setTeams] = useState<any[]>([]);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const isPlayerRole = user.role === 'jugador' || (user.role?.includes('jugador') && !user.role?.includes('admin'));
+  const isPlayerRole = user.role?.includes('jugador') && !user.role?.includes('admin');
+  const isParentRole = user.role?.includes('padre') && !user.role?.includes('admin');
+  
+  const parentPlayerIds = isParentRole 
+    ? JSON.parse(localStorage.getItem('parentPlayerIds') || '[]')
+    : [];
+  
+  const parentPlayers: Array<{ id: string; full_name: string }> = isParentRole
+    ? JSON.parse(localStorage.getItem('parentPlayers') || '[]')
+    : [];
 
   const loadPlayers = async () => {
     try {
@@ -33,7 +42,9 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
   };
 
   const loadData = async () => {
-    if (!playerId) {
+    const targetPlayerIds = isParentRole ? parentPlayerIds : [playerId];
+    
+    if (targetPlayerIds.length === 0 || (isParentRole && targetPlayerIds.length === 0)) {
       setLoading(false);
       return;
     }
@@ -50,7 +61,7 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
       const { data: convData } = await supabase
         .from('convocation')
         .select('*')
-        .eq('player_id', playerId);
+        .in('player_id', targetPlayerIds);
 
       if (convData && convData.length > 0) {
         const eventIds = convData.map(c => c.event_id);
@@ -64,9 +75,14 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
           const event = eventsData?.find(e => e.id === conv.event_id);
           const team = teamsData.find(t => t.id === event?.team_id);
           const finalConv = event?.final_convocation ? JSON.parse(event.final_convocation) : [];
-          const isConvoked = finalConv.includes(playerId);
+          
+          const isConvoked = isParentRole
+            ? parentPlayerIds.some((id: string) => finalConv.includes(id))
+            : finalConv.includes(playerId);
+          
           const hasFinalConvList = finalConv.length > 0;
           const isNotConvoked = hasFinalConvList && !isConvoked;
+          
           return {
             ...conv,
             event: event || null,
@@ -196,6 +212,15 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
             <span>👤</span>
             <span className="text-sm font-medium text-gray-700">{selectedPlayerName}</span>
           </div>
+        ) : isParentRole ? (
+          <div className="flex items-center gap-2">
+            {parentPlayers.map(p => (
+              <span key={p.id} className="px-3 py-1.5 bg-purple-100 text-purple-800 rounded-lg flex items-center gap-2">
+                <span>👤</span>
+                <span className="text-sm font-medium">{p.full_name}</span>
+              </span>
+            ))}
+          </div>
         ) : (
           <select
             value={playerId}
@@ -218,35 +243,43 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
             <div>
               <h3 className="font-semibold text-yellow-700 mb-2">⏳ Pendientes de confirmar</h3>
               <div className="space-y-2">
-                {pendingConvocations.map(conv => (
-                  <div key={conv.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold">
-                          {conv.event?.type === 'match' ? '🏑 Partido' : conv.event?.type === 'training' ? '🏋️ Entrenamiento' : '📋 Reunión'}
-                          {conv.event?.type === 'match' && conv.event?.opponent && ` vs ${conv.event.opponent}`}
-                        </p>
-                        <p className="text-sm text-gray-600">{formatDate(conv.event?.start_datetime || '')}</p>
-                        {conv.event?.location && <p className="text-sm text-gray-500">📍 {conv.event.location}</p>}
-                        {conv.teamName && <p className="text-sm text-gray-500">👥 {conv.teamName}</p>}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleUpdateStatus(conv.id, 'accepted')}
-                          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-                        >
-                          ✓ Confirmar
-                        </button>
-                        <button
-                          onClick={() => handleUpdateStatus(conv.id, 'declined')}
-                          className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
-                        >
-                          ✕ No puedo
-                        </button>
+                {pendingConvocations.map(conv => {
+                  const convPlayer = players.find(p => p.id === conv.player_id);
+                  return (
+                    <div key={conv.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          {isParentRole && convPlayer && (
+                            <span className="inline-block bg-purple-200 text-purple-800 text-xs px-2 py-0.5 rounded mb-1">
+                              👤 {convPlayer.full_name}
+                            </span>
+                          )}
+                          <p className="font-semibold">
+                            {conv.event?.type === 'match' ? '🏑 Partido' : conv.event?.type === 'training' ? '🏋️ Entrenamiento' : '📋 Reunión'}
+                            {conv.event?.type === 'match' && conv.event?.opponent && ` vs ${conv.event.opponent}`}
+                          </p>
+                          <p className="text-sm text-gray-600">{formatDate(conv.event?.start_datetime || '')}</p>
+                          {conv.event?.location && <p className="text-sm text-gray-500">📍 {conv.event.location}</p>}
+                          {conv.teamName && <p className="text-sm text-gray-500">👥 {conv.teamName}</p>}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleUpdateStatus(conv.id, 'accepted')}
+                            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                          >
+                            ✓ Confirmar
+                          </button>
+                          <button
+                            onClick={() => handleUpdateStatus(conv.id, 'declined')}
+                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+                          >
+                            ✕ No puedo
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -256,6 +289,7 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
               <h3 className="font-semibold text-green-700 mb-2">✅ Disponibles</h3>
               <div className="space-y-2">
                 {acceptedConvocations.map(conv => {
+                  const convPlayer = players.find(p => p.id === conv.player_id);
                   const isMatch = conv.event?.type === 'match';
                   const isConvoked = (conv as any).isConvoked;
                   const isNotConvoked = (conv as any).isNotConvoked;
@@ -274,6 +308,11 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
                     <div key={conv.id} className={cardClass}>
                       <div className="flex justify-between items-start">
                         <div>
+                          {isParentRole && convPlayer && (
+                            <span className="inline-block bg-purple-200 text-purple-800 text-xs px-2 py-0.5 rounded mb-1">
+                              👤 {convPlayer.full_name}
+                            </span>
+                          )}
                           <p className="font-semibold">
                             {conv.event?.type === 'match' ? '🏑 Partido' : conv.event?.type === 'training' ? '🏋️ Entrenamiento' : '📋 Reunión'}
                             {conv.event?.type === 'match' && conv.event?.opponent && ` vs ${conv.event.opponent}`}
@@ -335,26 +374,34 @@ const MyConvocations: React.FC<MyConvocationsProps> = ({ userPlayerId }) => {
             <div>
               <h3 className="font-semibold text-red-700 mb-2">❌ No puedes asistir</h3>
               <div className="space-y-2">
-                {declinedConvocations.map(conv => (
-                  <div key={conv.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-semibold">
-                          {conv.event?.type === 'match' ? '🏑 Partido' : conv.event?.type === 'training' ? '🏋️ Entrenamiento' : '📋 Reunión'}
-                          {conv.event?.type === 'match' && conv.event?.opponent && ` vs ${conv.event.opponent}`}
-                        </p>
-                        <p className="text-sm text-gray-600">{formatDate(conv.event?.start_datetime || '')}</p>
-                        {conv.teamName && <p className="text-sm text-gray-500">👥 {conv.teamName}</p>}
+                {declinedConvocations.map(conv => {
+                  const convPlayer = players.find(p => p.id === conv.player_id);
+                  return (
+                    <div key={conv.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          {isParentRole && convPlayer && (
+                            <span className="inline-block bg-purple-200 text-purple-800 text-xs px-2 py-0.5 rounded mb-1">
+                              👤 {convPlayer.full_name}
+                            </span>
+                          )}
+                          <p className="font-semibold">
+                            {conv.event?.type === 'match' ? '🏑 Partido' : conv.event?.type === 'training' ? '🏋️ Entrenamiento' : '📋 Reunión'}
+                            {conv.event?.type === 'match' && conv.event?.opponent && ` vs ${conv.event.opponent}`}
+                          </p>
+                          <p className="text-sm text-gray-600">{formatDate(conv.event?.start_datetime || '')}</p>
+                          {conv.teamName && <p className="text-sm text-gray-500">👥 {conv.teamName}</p>}
+                        </div>
+                        <button
+                          onClick={() => handleUpdateStatus(conv.id, 'accepted')}
+                          className="text-sm text-green-600 hover:text-green-800"
+                        >
+                          Cambiar a sí puedo
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleUpdateStatus(conv.id, 'accepted')}
-                        className="text-sm text-green-600 hover:text-green-800"
-                      >
-                        Cambiar a sí puedo
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
