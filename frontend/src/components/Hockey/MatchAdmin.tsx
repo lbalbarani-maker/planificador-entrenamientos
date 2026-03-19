@@ -44,6 +44,17 @@ const MatchAdmin: React.FC = () => {
     if (id) loadMatch();
   }, [id]);
 
+  const clearReactions = async (matchId: string) => {
+    try {
+      await supabase
+        .from('match_reactions')
+        .delete()
+        .eq('match_id', matchId);
+    } catch (error) {
+      console.error('Error clearing reactions:', error);
+    }
+  };
+
   // Avance automático de cuarto cuando el tiempo llega a 0
   useEffect(() => {
     if (!match || !isAdmin) return;
@@ -59,6 +70,7 @@ const MatchAdmin: React.FC = () => {
             running: false,
             status: 'finished',
           });
+          await clearReactions(match.id);
           setMatch(prev => prev ? { 
             ...prev, 
             running: false,
