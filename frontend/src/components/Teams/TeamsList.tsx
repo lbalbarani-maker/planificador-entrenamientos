@@ -423,6 +423,33 @@ const TeamsList: React.FC = () => {
     setSelectedEventDetail(event);
     setLoadingConvocations(true);
     setShowEventDetailModal(true);
+    
+    // Fetch opponent logo for matches
+    if (event.type === 'match' && event.opponent) {
+      try {
+        const { data: clubs } = await supabase.from('clubs').select('id, name, logo_url');
+        const clubsMap: Record<string, any> = {};
+        (clubs || []).forEach((c: any) => {
+          if (c.logo_url) clubsMap[c.name.toLowerCase()] = c;
+        });
+        
+        const opponentLower = event.opponent?.toLowerCase() || '';
+        let opponentFound = clubsMap[opponentLower];
+        
+        if (!opponentFound) {
+          opponentFound = Object.values(clubsMap).find((c: any) => 
+            c.name.toLowerCase().includes(opponentLower) || 
+            opponentLower.includes(c.name.toLowerCase())
+          );
+        }
+        
+        setOpponentData(opponentFound || null);
+      } catch (err) {
+        console.error('Error fetching opponent logo:', err);
+        setOpponentData(null);
+      }
+    }
+    
     try {
       const convs = await convocationApi.getConvocation(event.id, event.team_id);
       setEventConvocations(convs);
@@ -593,7 +620,42 @@ const TeamsList: React.FC = () => {
   };
 
   const shareConvocationAsImage = async () => {
-    if (!shareCardRef.current) return;
+    if (!shareCardRef.current || !selectedEventDetail) return;
+    
+    // Populate convocationPlayers if not already done
+    if (convocationPlayers.length === 0) {
+      const finalConv = (selectedEventDetail as any).final_convocation 
+        ? JSON.parse((selectedEventDetail as any).final_convocation) 
+        : [];
+      
+      let initialPlayers: any[] = [];
+      
+      if (finalConv.length > 0) {
+        const finalConvPlayers = eventConvocations.filter(c => finalConv.includes(c.player_id));
+        initialPlayers = finalConvPlayers.map(c => ({
+          id: c.player_id,
+          name: c.player?.full_name || c.player?.name || 'Jugadora',
+          selected: true,
+          shirt_number: c.player?.dorsal,
+          position: c.player?.position
+        }));
+      } else {
+        const acceptedPlayers = eventConvocations.filter(c => c.status === 'accepted');
+        initialPlayers = acceptedPlayers.map(c => ({
+          id: c.player_id,
+          name: c.player?.full_name || c.player?.name || 'Jugadora',
+          selected: true,
+          shirt_number: c.player?.dorsal,
+          position: c.player?.position
+        }));
+      }
+      
+      initialPlayers.sort((a, b) => a.name.localeCompare(b.name));
+      setConvocationPlayers(initialPlayers);
+      
+      // Wait for state to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
     
     try {
       const canvas = await html2canvas(shareCardRef.current, {
