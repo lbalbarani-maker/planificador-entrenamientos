@@ -79,10 +79,11 @@ const TeamsList: React.FC = () => {
   const getDuplicateDorsals = (players: any[]): Map<number, string[]> => {
     const dorsalMap = new Map<number, string[]>();
     players.forEach(p => {
-      if (p.shirt_number) {
-        const existing = dorsalMap.get(p.shirt_number) || [];
-        existing.push(p.name);
-        dorsalMap.set(p.shirt_number, existing);
+      const dorsal = p.shirt_number || p.shirtNumber;
+      if (dorsal) {
+        const existing = dorsalMap.get(dorsal) || [];
+        existing.push(p.name || p.displayName);
+        dorsalMap.set(dorsal, existing);
       }
     });
     const duplicates = new Map<number, string[]>();
@@ -1974,7 +1975,6 @@ const TeamsList: React.FC = () => {
                         return (
                         <div key={player.id} className={`text-sm text-gray-700 flex items-center gap-2 ${isDuplicate ? 'text-red-600 font-bold' : ''}`}>
                           <span className="w-5 text-center text-gray-400">{index + 1}.</span>
-                          <span>{isGoalkeeper(player.position) ? '🥅' : '👤'}</span>
                           <span className="font-medium">{player.name}</span>
                           {player.shirt_number && (
                             <span>
