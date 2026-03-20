@@ -467,34 +467,46 @@ const TeamsList: React.FC = () => {
 
   const saveConvocation = async () => {
     if (!selectedEventDetail) return;
-    const selectedPlayers = convocationPlayers.filter(p => p.selected).map(p => p.id);
-    try {
-      await supabase
-        .from('events')
-        .update({ final_convocation: JSON.stringify(selectedPlayers) })
-        .eq('id', selectedEventDetail.id);
-      
-      setShowConvocationModal(false);
-      
-      const { data: updatedEvent } = await supabase
-        .from('events')
-        .select('*')
-        .eq('id', selectedEventDetail.id)
-        .single();
-      
-      if (updatedEvent) {
-        setSelectedEventDetail(updatedEvent);
-        const convs = await convocationApi.getConvocation(updatedEvent.id);
-        setEventConvocations(convs);
-        const hasConv = updatedEvent.final_convocation && JSON.parse(updatedEvent.final_convocation).length > 0;
-        setEventHasConvocation(hasConv);
-      }
-      
-      setShowSuccessModal(true);
-    } catch (error) {
-      console.error('Error saving convocation:', error);
-      alert('Error al guardar la convocatoria');
+    const selectedPlayers = convocationPlayers.filter(p => p.selected);
+    
+    // CREAR registros en convocation para jugadores nuevos que no existan
+    const existingPlayerIds = eventConvocations.map(c => c.player_id);
+    const newPlayersToAdd = selectedPlayers.filter(p => !existingPlayerIds.includes(p.id));
+    
+    if (newPlayersToAdd.length > 0) {
+      const newConvocations = newPlayersToAdd.map(p => ({
+        event_id: selectedEventDetail.id,
+        player_id: p.id,
+        status: 'accepted'
+      }));
+      await supabase.from('convocation').insert(newConvocations);
     }
+    
+    // Guardar final_convocation
+    const selectedPlayerIds = selectedPlayers.map(p => p.id);
+    await supabase
+      .from('events')
+      .update({ final_convocation: JSON.stringify(selectedPlayerIds) })
+      .eq('id', selectedEventDetail.id);
+    
+    setShowConvocationModal(false);
+    
+    // Recargar datos
+    const { data: updatedEvent } = await supabase
+      .from('events')
+      .select('*')
+      .eq('id', selectedEventDetail.id)
+      .single();
+    
+    if (updatedEvent) {
+      setSelectedEventDetail(updatedEvent);
+      const convs = await convocationApi.getConvocation(updatedEvent.id);
+      setEventConvocations(convs);
+      const hasConv = updatedEvent.final_convocation && JSON.parse(updatedEvent.final_convocation).length > 0;
+      setEventHasConvocation(hasConv);
+    }
+    
+    setShowSuccessModal(true);
   };
 
   const togglePlayerInConvocation = (playerId: string) => {
