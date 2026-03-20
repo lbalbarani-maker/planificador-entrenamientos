@@ -2052,10 +2052,6 @@ const TeamsList: React.FC = () => {
                   </div>
                   );
                 })()}
-                
-                <div className="text-center pt-3 border-t border-gray-200">
-                  <p className="text-xs text-gray-400">Club de Hockey Sanse Complutense</p>
-                </div>
               </div>
             </div>
           </div>
