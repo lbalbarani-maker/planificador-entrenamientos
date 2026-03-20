@@ -117,7 +117,7 @@ export const teamsApi = {
     return data || [];
   },
 
-  async createPlayer(fullName: string, birthDate?: string): Promise<Player> {
+  async createPlayer(fullName: string, birthDate?: string, extras?: { dorsal?: number; position?: string }): Promise<Player> {
     const user = await getCurrentUser();
     const { data, error } = await supabase
       .from('players')
@@ -126,6 +126,8 @@ export const teamsApi = {
           club_id: user.club_id,
           full_name: fullName,
           birth_date: birthDate,
+          dorsal: extras?.dorsal,
+          position: extras?.position,
           is_minor: false,
           is_self_managed: false,
         },
@@ -184,7 +186,7 @@ export const teamsApi = {
     return data || [];
   },
 
-  async addPlayerToTeam(teamId: string, playerId: string, shirtNumber?: number): Promise<TeamPlayer> {
+  async addPlayerToTeam(teamId: string, playerId: string, shirtNumber?: number, position?: string): Promise<TeamPlayer> {
     const { data, error } = await supabase
       .from('team_players')
       .insert([
@@ -192,6 +194,7 @@ export const teamsApi = {
           team_id: teamId,
           player_id: playerId,
           shirt_number: shirtNumber,
+          position: position,
           is_active: true,
         },
       ])

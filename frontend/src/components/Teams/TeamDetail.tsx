@@ -18,7 +18,8 @@ const TeamDetail: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<string>('');
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerNumber, setNewPlayerNumber] = useState('');
-  const [editingPlayer, setEditingPlayer] = useState<{ id: string; name: string; number: string } | null>(null);
+  const [newPlayerPosition, setNewPlayerPosition] = useState('');
+  const [editingPlayer, setEditingPlayer] = useState<{ id: string; name: string; number: string; position: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'players' | 'events'>('players');
   const [addingPlayers, setAddingPlayers] = useState<string[]>([]);
 
@@ -63,15 +64,19 @@ const TeamDetail: React.FC = () => {
     if (!newPlayerName.trim()) return;
     
     try {
-      const player = await teamsApi.createPlayer(newPlayerName);
+      const dorsal = newPlayerNumber ? parseInt(newPlayerNumber) : undefined;
+      const position = newPlayerPosition || undefined;
+      const player = await teamsApi.createPlayer(newPlayerName, undefined, { dorsal, position });
       await teamsApi.addPlayerToTeam(
         id!, 
         player.id, 
-        newPlayerNumber ? parseInt(newPlayerNumber) : undefined
+        dorsal,
+        position
       );
       await loadData();
       setNewPlayerName('');
       setNewPlayerNumber('');
+      setNewPlayerPosition('');
       setShowPlayerForm(false);
     } catch (error) {
       console.error('Error adding player:', error);
@@ -111,6 +116,7 @@ const TeamDetail: React.FC = () => {
     try {
       await teamsApi.updateTeamPlayer(editingPlayer.id, {
         shirt_number: editingPlayer.number ? parseInt(editingPlayer.number) : undefined,
+        position: editingPlayer.position || undefined,
       });
       await loadData();
       setEditingPlayer(null);
@@ -249,6 +255,7 @@ const TeamDetail: React.FC = () => {
                           id: tp.id,
                           name: tp.player?.full_name || '',
                           number: tp.shirt_number?.toString() || '',
+                          position: tp.position || '',
                         })}
                         className="text-blue-600 hover:text-blue-800"
                       >
@@ -382,6 +389,21 @@ const TeamDetail: React.FC = () => {
                     max="99"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Posición</label>
+                  <select
+                    value={newPlayerPosition}
+                    onChange={(e) => setNewPlayerPosition(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Seleccionar...</option>
+                    <option value="Portera">Portera</option>
+                    <option value="Defensa">Defensa</option>
+                    <option value="Centrocampista">Centrocampista</option>
+                    <option value="Delantera">Delantera</option>
+                    <option value="Jugador">Jugador</option>
+                  </select>
+                </div>
                 <div className="flex gap-2">
                   <button
                     type="submit"
@@ -406,7 +428,7 @@ const TeamDetail: React.FC = () => {
         {editingPlayer && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 max-w-md w-full">
-              <h3 className="text-xl font-bold mb-4">Editar Jugador</h3>
+              <h3 className="text-xl font-bold mb-4">Editar Jugador: {editingPlayer.name}</h3>
               <form onSubmit={handleUpdatePlayer} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dorsal</label>
@@ -418,6 +440,21 @@ const TeamDetail: React.FC = () => {
                     min="1"
                     max="99"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Posición</label>
+                  <select
+                    value={editingPlayer.position}
+                    onChange={(e) => setEditingPlayer({ ...editingPlayer, position: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Seleccionar...</option>
+                    <option value="Portera">Portera</option>
+                    <option value="Defensa">Defensa</option>
+                    <option value="Centrocampista">Centrocampista</option>
+                    <option value="Delantera">Delantera</option>
+                    <option value="Jugador">Jugador</option>
+                  </select>
                 </div>
                 <div className="flex gap-2">
                   <button

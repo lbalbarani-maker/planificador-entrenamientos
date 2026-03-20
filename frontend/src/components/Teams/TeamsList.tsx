@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import html2canvas from 'html2canvas';
 import { teamsApi, eventsApi, convocationApi, trainingsApi, clubsApi } from '../../lib/supabaseTeams';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { supabase } from '../../lib/supabase';
@@ -52,6 +53,9 @@ const TeamsList: React.FC = () => {
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   const [clubColors, setClubColors] = useState<{ primary: string; secondary: string }>({ primary: '#1E40AF', secondary: '#FFFFFF' });
+  const [matchData, setMatchData] = useState<any>(null);
+  const [opponentData, setOpponentData] = useState<any>(null);
+  const shareCardRef = useRef<HTMLDivElement>(null);
   
   const [teamForm, setTeamForm] = useState({ name: '', category: '', gender: '' });
   const [isRecurring, setIsRecurring] = useState(false);
@@ -406,19 +410,6 @@ const TeamsList: React.FC = () => {
   const openConvocationModal = async () => {
     if (!selectedEventDetail) return;
     
-    const { data: teamPlayersData } = await supabase
-      .from('team_players')
-      .select('player_id, shirt_number, position')
-      .eq('team_id', selectedEventDetail.team_id);
-    
-    const teamPlayersMap: Record<string, { shirt_number?: number; position?: string }> = {};
-    (teamPlayersData || []).forEach((tp: any) => {
-      teamPlayersMap[tp.player_id] = { 
-        shirt_number: tp.shirt_number, 
-        position: tp.position 
-      };
-    });
-    
     const finalConv = (selectedEventDetail as any).final_convocation ? JSON.parse((selectedEventDetail as any).final_convocation) : [];
     
     let initialPlayers: any[] = [];
@@ -429,8 +420,8 @@ const TeamsList: React.FC = () => {
         id: c.player_id,
         name: c.player?.full_name || c.player?.name || 'Jugadora',
         selected: true,
-        shirt_number: teamPlayersMap[c.player_id]?.shirt_number,
-        position: teamPlayersMap[c.player_id]?.position
+        shirt_number: c.player?.dorsal,
+        position: c.player?.position
       }));
     } else {
       const acceptedPlayers = eventConvocations.filter(c => c.status === 'accepted');
@@ -438,13 +429,45 @@ const TeamsList: React.FC = () => {
         id: c.player_id,
         name: c.player?.full_name || c.player?.name || 'Jugadora',
         selected: true,
-        shirt_number: teamPlayersMap[c.player_id]?.shirt_number,
-        position: teamPlayersMap[c.player_id]?.position
+        shirt_number: c.player?.dorsal,
+        position: c.player?.position
       }));
     }
     
     initialPlayers.sort((a, b) => a.name.localeCompare(b.name));
     setConvocationPlayers(initialPlayers);
+    
+    if (selectedEventDetail.type === 'match') {
+      try {
+        const { data: hockeyMatch } = await supabase
+          .from('hockey_matches')
+          .select('*')
+          .eq('event_id', selectedEventDetail.id)
+          .single();
+        setMatchData(hockeyMatch);
+        
+        if (selectedEventDetail.opponent) {
+          const { data: opponent } = await supabase
+            .from('opponent_teams')
+            .select('*')
+            .ilike('name', selectedEventDetail.opponent)
+            .single();
+          if (!opponent) {
+            const { data: opponentClub } = await supabase
+              .from('clubs')
+              .select('*')
+              .ilike('name', selectedEventDetail.opponent)
+              .single();
+            setOpponentData(opponentClub);
+          } else {
+            setOpponentData(opponent);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching match data:', err);
+      }
+    }
+    
     setShowConvocationModal(true);
   };
 
@@ -534,6 +557,38 @@ const TeamsList: React.FC = () => {
     setConvocationPlayers(prev => prev.map(p => 
       p.id === playerId ? { ...p, selected: !p.selected } : p
     ));
+  };
+
+  const shareConvocationAsImage = async () => {
+    if (!shareCardRef.current) return;
+    
+    try {
+      const canvas = await html2canvas(shareCardRef.current, {
+        useCORS: true
+      } as any);
+      
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          alert('¡Imagen copiada al portapapeles! Pégala en WhatsApp.');
+        } catch (err) {
+          console.error('Error al copiar:', err);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `convocatoria-${Date.now()}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png');
+    } catch (err) {
+      console.error('Error generando imagen:', err);
+      alert('Error al generar la imagen');
+    }
   };
 
   const handleLinkTraining = async (trainingId: string) => {
@@ -1468,15 +1523,12 @@ const TeamsList: React.FC = () => {
                 const finalConvIds = (selectedEventDetail as any).final_convocation ? JSON.parse((selectedEventDetail as any).final_convocation) : [];
                 const convokedPlayers = sortedConvocations.filter(c => finalConvIds.includes(c.player_id));
                 
-                const enrichedConvoked = convokedPlayers.map(conv => {
-                  const teamPlayer = conv.teamPlayer as any;
-                  return {
-                    ...conv,
-                    displayName: conv.player?.full_name || conv.player?.name || 'Jugadora',
-                    shirtNumber: teamPlayer?.shirt_number,
-                    position: teamPlayer?.position
-                  };
-                }).sort((a, b) => a.displayName.localeCompare(b.displayName));
+                const enrichedConvoked = convokedPlayers.map(conv => ({
+                  ...conv,
+                  displayName: conv.player?.full_name || conv.player?.name || 'Jugadora',
+                  shirtNumber: conv.player?.dorsal || conv.teamPlayer?.shirt_number,
+                  position: conv.player?.position || conv.teamPlayer?.position
+                })).sort((a, b) => a.displayName.localeCompare(b.displayName));
 
                 return (
                 <div className="mb-4">
@@ -1576,10 +1628,54 @@ const TeamsList: React.FC = () => {
         {/* Modal de Convocatoria */}
         {showConvocationModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-              <h3 className="text-xl font-bold mb-4 text-gray-800">{eventHasConvocation ? 'Editar Convocatoria' : 'Crear Convocatoria'}</h3>
+            <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-gray-800">{eventHasConvocation ? 'Editar Convocatoria' : 'Crear Convocatoria'}</h3>
+                <button
+                  onClick={() => setShowConvocationModal(false)}
+                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+              
+              {selectedEventDetail?.type === 'match' && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-center gap-4 mb-2">
+                    <img 
+                      src={selectedEventDetail.team?.club?.logo_url || 'https://placehold.co/60x60?text=Local'} 
+                      alt="Local" 
+                      className="w-12 h-12 object-contain rounded-full border"
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/60x60?text=Local'; }}
+                    />
+                    <div className="text-center">
+                      <p className="font-bold text-lg">{eventClubName || eventTeamName} vs {selectedEventDetail.opponent || 'Rival'}</p>
+                      <div className="flex items-center justify-center gap-1 mt-1">
+                        {(() => {
+                          const kitParts = (selectedEventDetail.kit_color || '').split(';');
+                          return kitParts.map((color, i) => color ? (
+                            <span 
+                              key={i} 
+                              className="inline-block w-5 h-5 rounded-full border border-gray-300"
+                              style={{ backgroundColor: color }}
+                              title={['Camiseta', 'Pantalón', 'Medias'][i]}
+                            />
+                          ) : null);
+                        })()}
+                      </div>
+                    </div>
+                    <img 
+                      src={opponentData?.logo_url || 'https://placehold.co/60x60?text=Visitante'} 
+                      alt="Visitante" 
+                      className="w-12 h-12 object-contain rounded-full border"
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/60x60?text=Visitante'; }}
+                    />
+                  </div>
+                </div>
+              )}
+              
               <p className="text-gray-600 mb-4">
-                Selecciona las jugadoras que serán convocadas para este partido:
+                Selecciona las jugadoras que serán convocadas:
               </p>
               
               <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
@@ -1614,17 +1710,90 @@ const TeamsList: React.FC = () => {
 
               <div className="flex gap-2">
                 <button
-                  onClick={saveConvocation}
+                  onClick={shareConvocationAsImage}
                   className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700"
                 >
-                  Guardar Convocatoria ({convocationPlayers.filter(p => p.selected).length})
+                  📤 Compartir
                 </button>
                 <button
-                  onClick={() => setShowConvocationModal(false)}
-                  className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600"
+                  onClick={saveConvocation}
+                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
                 >
-                  Cancelar
+                  Guardar ({convocationPlayers.filter(p => p.selected).length})
                 </button>
+              </div>
+            </div>
+            
+            {/* Hidden card for image generation */}
+            <div className="fixed -left-[9999px] top-0">
+              <div 
+                ref={shareCardRef}
+                className="bg-white p-6 w-[400px] font-sans"
+                style={{ background: 'linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%)' }}
+              >
+                <div className="bg-white rounded-xl shadow-lg p-5">
+                  <div className="text-center mb-4 pb-3 border-b border-gray-200">
+                    <p className="text-xs text-gray-500 mb-2">🏑 CONVOCATORIA</p>
+                    <div className="flex items-center justify-center gap-3 mb-2">
+                      <img 
+                        src={selectedEventDetail?.team?.club?.logo_url || 'https://placehold.co/50x50?text=Local'} 
+                        alt="Local" 
+                        className="w-10 h-10 object-contain rounded-full"
+                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/50x50?text=Local'; }}
+                      />
+                      <div>
+                        <p className="font-bold text-lg text-gray-800">{eventClubName || eventTeamName}</p>
+                        <p className="text-gray-500 text-sm">vs</p>
+                        <p className="font-bold text-lg text-gray-800">{selectedEventDetail?.opponent || 'Rival'}</p>
+                      </div>
+                      <img 
+                        src={opponentData?.logo_url || 'https://placehold.co/50x50?text=Visitante'} 
+                        alt="Visitante" 
+                        className="w-10 h-10 object-contain rounded-full"
+                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/50x50?text=Visitante'; }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-center gap-1 mb-2">
+                      {(() => {
+                        const kitParts = (selectedEventDetail?.kit_color || '').split(';');
+                        return kitParts.map((color, i) => color ? (
+                          <span 
+                            key={i} 
+                            className="inline-block w-5 h-5 rounded-full border border-gray-300"
+                            style={{ backgroundColor: color }}
+                          />
+                        ) : null);
+                      })()}
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p>📅 {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : ''}</p>
+                      <p>🕐 {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                      <p>📍 {selectedEventDetail?.location || 'Por confirmar'}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <p className="font-bold text-gray-800 text-center mb-2">
+                      CONVOCADAS ({convocationPlayers.filter(p => p.selected).length})
+                    </p>
+                    <div className="space-y-1">
+                      {convocationPlayers.filter(p => p.selected).sort((a, b) => a.name.localeCompare(b.name)).map((player, index) => (
+                        <div key={player.id} className="text-sm text-gray-700 flex items-center gap-2">
+                          <span className="w-5 text-center text-gray-400">{index + 1}.</span>
+                          <span>{player.position === 'Portera' ? '🥅' : '👤'}</span>
+                          <span className="font-medium">{player.name}</span>
+                          {player.shirt_number && (
+                            <span className="text-gray-500">#{player.shirt_number}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="text-center pt-3 border-t border-gray-200">
+                    <p className="text-xs text-gray-400">Club de Hockey Sanse Complutense</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
