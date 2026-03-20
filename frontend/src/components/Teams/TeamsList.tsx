@@ -389,7 +389,7 @@ const TeamsList: React.FC = () => {
     setLoadingConvocations(true);
     setShowEventDetailModal(true);
     try {
-      const convs = await convocationApi.getConvocation(event.id);
+      const convs = await convocationApi.getConvocation(event.id, event.team_id);
       setEventConvocations(convs);
       const hasConv = (event as any).final_convocation && JSON.parse((event as any).final_convocation).length > 0;
       setEventHasConvocation(hasConv);
@@ -406,26 +406,45 @@ const TeamsList: React.FC = () => {
   const openConvocationModal = async () => {
     if (!selectedEventDetail) return;
     
+    const { data: teamPlayersData } = await supabase
+      .from('team_players')
+      .select('player_id, shirt_number, position')
+      .eq('team_id', selectedEventDetail.team_id);
+    
+    const teamPlayersMap: Record<string, { shirt_number?: number; position?: string }> = {};
+    (teamPlayersData || []).forEach((tp: any) => {
+      teamPlayersMap[tp.player_id] = { 
+        shirt_number: tp.shirt_number, 
+        position: tp.position 
+      };
+    });
+    
     const finalConv = (selectedEventDetail as any).final_convocation ? JSON.parse((selectedEventDetail as any).final_convocation) : [];
+    
+    let initialPlayers: any[] = [];
     
     if (finalConv.length > 0) {
       const finalConvPlayers = eventConvocations.filter(c => finalConv.includes(c.player_id));
-      const initialPlayers = finalConvPlayers.map(c => ({
+      initialPlayers = finalConvPlayers.map(c => ({
         id: c.player_id,
         name: c.player?.full_name || c.player?.name || 'Jugadora',
-        selected: true
+        selected: true,
+        shirt_number: teamPlayersMap[c.player_id]?.shirt_number,
+        position: teamPlayersMap[c.player_id]?.position
       }));
-      setConvocationPlayers(initialPlayers);
     } else {
       const acceptedPlayers = eventConvocations.filter(c => c.status === 'accepted');
-      const initialPlayers = acceptedPlayers.map(c => ({
+      initialPlayers = acceptedPlayers.map(c => ({
         id: c.player_id,
         name: c.player?.full_name || c.player?.name || 'Jugadora',
-        selected: true
+        selected: true,
+        shirt_number: teamPlayersMap[c.player_id]?.shirt_number,
+        position: teamPlayersMap[c.player_id]?.position
       }));
-      setConvocationPlayers(initialPlayers);
     }
     
+    initialPlayers.sort((a, b) => a.name.localeCompare(b.name));
+    setConvocationPlayers(initialPlayers);
     setShowConvocationModal(true);
   };
 
@@ -435,13 +454,15 @@ const TeamsList: React.FC = () => {
     try {
       const { data: teamPlayers } = await supabase
         .from('team_players')
-        .select('player_id, players(full_name)')
+        .select('player_id, shirt_number, position, players(full_name)')
         .eq('team_id', selectedEventDetail.team_id);
       
-      const allPlayers = teamPlayers?.map(tp => ({
+      const allPlayers = (teamPlayers || []).map((tp: any) => ({
         id: tp.player_id,
-        name: (tp as any).players?.full_name || 'Jugadora'
-      })) || [];
+        name: tp.players?.full_name || 'Jugadora',
+        shirt_number: tp.shirt_number,
+        position: tp.position
+      })).sort((a, b) => a.name.localeCompare(b.name));
       
       const existingIds = convocationPlayers.map(p => p.id);
       const newPlayers = allPlayers.filter(p => !existingIds.includes(p.id)).map(p => ({ ...p, selected: false }));
@@ -500,7 +521,7 @@ const TeamsList: React.FC = () => {
     
     if (updatedEvent) {
       setSelectedEventDetail(updatedEvent);
-      const convs = await convocationApi.getConvocation(updatedEvent.id);
+      const convs = await convocationApi.getConvocation(updatedEvent.id, selectedEventDetail.team_id);
       setEventConvocations(convs);
       const hasConv = updatedEvent.final_convocation && JSON.parse(updatedEvent.final_convocation).length > 0;
       setEventHasConvocation(hasConv);
@@ -1446,6 +1467,16 @@ const TeamsList: React.FC = () => {
                 const pending = sortedConvocations.filter(c => c.status === 'pending');
                 const finalConvIds = (selectedEventDetail as any).final_convocation ? JSON.parse((selectedEventDetail as any).final_convocation) : [];
                 const convokedPlayers = sortedConvocations.filter(c => finalConvIds.includes(c.player_id));
+                
+                const enrichedConvoked = convokedPlayers.map(conv => {
+                  const teamPlayer = conv.teamPlayer as any;
+                  return {
+                    ...conv,
+                    displayName: conv.player?.full_name || conv.player?.name || 'Jugadora',
+                    shirtNumber: teamPlayer?.shirt_number,
+                    position: teamPlayer?.position
+                  };
+                }).sort((a, b) => a.displayName.localeCompare(b.displayName));
 
                 return (
                 <div className="mb-4">
@@ -1457,15 +1488,15 @@ const TeamsList: React.FC = () => {
                   ) : eventHasConvocation ? (
                     <div className="bg-blue-50 border border-blue-300 rounded-lg p-3">
                       <h5 className="font-semibold text-blue-800 mb-2">
-                        Convocadas ({convokedPlayers.length})
+                        Convocadas ({enrichedConvoked.length})
                       </h5>
                       <div className="space-y-1">
-                        {convokedPlayers.map(conv => (
+                        {enrichedConvoked.map(conv => (
                           <div key={conv.id} className="text-sm text-blue-700">
-                            • {conv.player?.full_name || conv.player?.name || 'Jugadora'}
+                            • {conv.position === 'Portera' ? '🥅 ' : ''}{conv.displayName}{conv.shirtNumber ? ` (#${conv.shirtNumber})` : ''}
                           </div>
                         ))}
-                        {convokedPlayers.length === 0 && (
+                        {enrichedConvoked.length === 0 && (
                           <p className="text-sm text-blue-600 italic">Sin jugadoras convocadas</p>
                         )}
                       </div>
@@ -1567,7 +1598,7 @@ const TeamsList: React.FC = () => {
                         className="w-5 h-5 mr-3"
                       />
                       <span className={player.selected ? 'text-gray-800' : 'text-gray-500'}>
-                        {player.name}
+                        {player.position === 'Portera' ? '🥅 ' : ''}{player.name}{player.shirt_number ? ` (#${player.shirt_number})` : ''}
                       </span>
                     </label>
                   ))
@@ -1624,7 +1655,7 @@ const TeamsList: React.FC = () => {
                         className="w-5 h-5 mr-3"
                       />
                       <span className={player.selected ? 'text-gray-800' : 'text-gray-600'}>
-                        {player.name}
+                        {player.position === 'Portera' ? '🥅 ' : ''}{player.name}{player.shirt_number ? ` (#${player.shirt_number})` : ''}
                       </span>
                     </label>
                   ))

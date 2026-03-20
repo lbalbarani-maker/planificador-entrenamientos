@@ -331,7 +331,7 @@ export const eventsApi = {
 };
 
 export const convocationApi = {
-  async getConvocation(eventId: string): Promise<Convocation[]> {
+  async getConvocation(eventId: string, teamId?: string): Promise<Convocation[]> {
     const { data, error } = await supabase
       .from('convocation')
       .select('*')
@@ -346,6 +346,7 @@ export const convocationApi = {
     
     const playerIds = data.map(c => c.player_id).filter(Boolean);
     let playersMap: Record<string, any> = {};
+    let teamPlayersMap: Record<string, any> = {};
     
     if (playerIds.length > 0) {
       const { data: players } = await supabase
@@ -362,6 +363,23 @@ export const convocationApi = {
           };
         });
       }
+      
+      if (teamId) {
+        const { data: teamPlayers } = await supabase
+          .from('team_players')
+          .select('player_id, shirt_number, position')
+          .eq('team_id', teamId)
+          .in('player_id', playerIds);
+        
+        if (teamPlayers) {
+          teamPlayers.forEach((tp: any) => {
+            teamPlayersMap[tp.player_id] = {
+              shirt_number: tp.shirt_number,
+              position: tp.position
+            };
+          });
+        }
+      }
     }
     
     return data.map(c => ({
@@ -374,6 +392,10 @@ export const convocationApi = {
         club_id: '',
         is_minor: false,
         is_self_managed: false
+      } : null,
+      teamPlayer: teamPlayersMap[c.player_id] ? {
+        shirt_number: teamPlayersMap[c.player_id].shirt_number,
+        position: teamPlayersMap[c.player_id].position
       } : null
     }));
   },
