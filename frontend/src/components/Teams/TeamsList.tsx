@@ -56,6 +56,7 @@ const TeamsList: React.FC = () => {
   const [matchData, setMatchData] = useState<any>(null);
   const [opponentData, setOpponentData] = useState<any>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
+  const [showShareSuccessModal, setShowShareSuccessModal] = useState(false);
   
   const [teamForm, setTeamForm] = useState({ name: '', category: '', gender: '' });
   const [isRecurring, setIsRecurring] = useState(false);
@@ -74,6 +75,30 @@ const TeamsList: React.FC = () => {
     notes: '',
     opponent: ''
   });
+
+  const getDuplicateDorsals = (players: any[]): Map<number, string[]> => {
+    const dorsalMap = new Map<number, string[]>();
+    players.forEach(p => {
+      if (p.shirt_number) {
+        const existing = dorsalMap.get(p.shirt_number) || [];
+        existing.push(p.name);
+        dorsalMap.set(p.shirt_number, existing);
+      }
+    });
+    const duplicates = new Map<number, string[]>();
+    dorsalMap.forEach((names, dorsal) => {
+      if (names.length > 1) {
+        duplicates.set(dorsal, names);
+      }
+    });
+    return duplicates;
+  };
+
+  const getDorsalTooltip = (dorsal: number | undefined, name: string, duplicates: Map<number, string[]>): string => {
+    if (!dorsal || !duplicates.has(dorsal)) return '';
+    const others = duplicates.get(dorsal)?.filter(n => n !== name).join(', ');
+    return others ? `⚠️ Dorsal duplicado con: ${others}` : '';
+  };
 
   useEffect(() => {
     loadData();
@@ -574,7 +599,7 @@ const TeamsList: React.FC = () => {
           await navigator.clipboard.write([
             new ClipboardItem({ 'image/png': blob })
           ]);
-          alert('¡Imagen copiada al portapapeles! Pégala en WhatsApp.');
+          setShowShareSuccessModal(true);
         } catch (err) {
           console.error('Error al copiar:', err);
           const url = URL.createObjectURL(blob);
@@ -1475,24 +1500,54 @@ const TeamsList: React.FC = () => {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 max-w-5xl w-full max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
-                {selectedEventDetail.type === 'match' ? (
-                  <h3 className="text-xl font-bold text-gray-800">
-                    Partido: {eventClubName || eventTeamName} vs {selectedEventDetail.opponent || 'Rival'}
-                  </h3>
-                ) : (
-                  <h3 className="text-xl font-bold text-gray-800">
-                    {selectedEventDetail.type === 'training' ? 'Entrenamiento' : 'Reunión'}
-                  </h3>
-                )}
-                {selectedEventDetail.type === 'match' && (
-                  <button
-                    onClick={openConvocationModal}
-                    className={`px-4 py-2 rounded-lg font-medium ${eventHasConvocation ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-green-600 text-white hover:bg-green-700'}`}
-                  >
-                    {eventHasConvocation ? '✏️ Editar Convocatoria' : '📋 Crear Convocatoria'}
-                  </button>
-                )}
+                <h3 className="text-xl font-bold text-gray-800">
+                  {selectedEventDetail.type === 'match' 
+                    ? `${eventClubName || eventTeamName} vs ${selectedEventDetail.opponent || 'Rival'}`
+                    : (selectedEventDetail.type === 'training' ? 'Entrenamiento' : 'Reunión')
+                  }
+                </h3>
+                <button
+                  onClick={() => { setShowEventDetailModal(false); setSelectedEventDetail(null); }}
+                  className="text-gray-500 hover:text-gray-700 text-2xl"
+                >
+                  ×
+                </button>
               </div>
+              
+              {selectedEventDetail.type === 'match' && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-center gap-4">
+                    <img 
+                      src={selectedEventDetail.team?.club?.logo_url || 'https://placehold.co/60x60?text=Local'} 
+                      alt="Local" 
+                      className="w-12 h-12 object-contain rounded-full border"
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/60x60?text=Local'; }}
+                    />
+                    <div className="text-center">
+                      <p className="font-bold">{eventClubName || eventTeamName} vs {selectedEventDetail.opponent || 'Rival'}</p>
+                      <div className="flex items-center justify-center gap-1 mt-1">
+                        {(() => {
+                          const kitParts = (selectedEventDetail.kit_color || '').split(';');
+                          return kitParts.map((color, i) => color ? (
+                            <span 
+                              key={i} 
+                              className="inline-block w-5 h-5 rounded-full border border-gray-300"
+                              style={{ backgroundColor: color }}
+                              title={['Camiseta', 'Pantalón', 'Medias'][i]}
+                            />
+                          ) : null);
+                        })()}
+                      </div>
+                    </div>
+                    <img 
+                      src={opponentData?.logo_url || 'https://placehold.co/60x60?text=Visitante'} 
+                      alt="Visitante" 
+                      className="w-12 h-12 object-contain rounded-full border"
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/60x60?text=Visitante'; }}
+                    />
+                  </div>
+                </div>
+              )}
               
               <div className="mb-4">
                 <table className="w-full border-collapse border border-gray-300 rounded-lg overflow-hidden">
@@ -1513,6 +1568,25 @@ const TeamsList: React.FC = () => {
                 </table>
               </div>
 
+              <div className="flex gap-2 mb-4">
+                {selectedEventDetail.type === 'match' && eventHasConvocation && (
+                  <button
+                    onClick={shareConvocationAsImage}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                  >
+                    📤 Compartir
+                  </button>
+                )}
+                {selectedEventDetail.type === 'match' && (
+                  <button
+                    onClick={openConvocationModal}
+                    className={`px-4 py-2 rounded-lg font-medium ${eventHasConvocation ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                  >
+                    {eventHasConvocation ? '✏️ Editar Convocatoria' : '📋 Crear Convocatoria'}
+                  </button>
+                )}
+              </div>
+
               {(selectedEventDetail.type === 'match' || selectedEventDetail.type === 'training') && (() => {
                 const sortedConvocations = [...eventConvocations].sort((a, b) => 
                   (a.player?.name || '').localeCompare(b.player?.name || '')
@@ -1529,6 +1603,8 @@ const TeamsList: React.FC = () => {
                   shirtNumber: conv.player?.dorsal || conv.teamPlayer?.shirt_number,
                   position: conv.player?.position || conv.teamPlayer?.position
                 })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+                
+                const duplicateDorsals = getDuplicateDorsals(enrichedConvoked);
 
                 return (
                 <div className="mb-4">
@@ -1540,14 +1616,29 @@ const TeamsList: React.FC = () => {
                   ) : eventHasConvocation ? (
                     <div className="bg-blue-50 border border-blue-300 rounded-lg p-3">
                       <h5 className="font-semibold text-blue-800 mb-2">
-                        Convocadas ({enrichedConvoked.length})
+                        Convocadas
                       </h5>
                       <div className="space-y-1">
-                        {enrichedConvoked.map(conv => (
-                          <div key={conv.id} className="text-sm text-blue-700">
-                            • {conv.position === 'Portera' ? '🥅 ' : ''}{conv.displayName}{conv.shirtNumber ? ` (#${conv.shirtNumber})` : ''}
-                          </div>
-                        ))}
+                        {enrichedConvoked.map(conv => {
+                          const isDuplicate = duplicateDorsals.has(conv.shirtNumber);
+                          const tooltipText = getDorsalTooltip(conv.shirtNumber, conv.displayName, duplicateDorsals);
+                          return (
+                            <div 
+                              key={conv.id} 
+                              className={`text-sm flex items-center gap-2 ${isDuplicate ? 'text-red-600' : 'text-blue-700'}`}
+                              title={tooltipText}
+                            >
+                              • {conv.displayName}
+                              {conv.shirtNumber && (
+                                <span className={isDuplicate ? 'text-red-600 font-bold' : 'text-gray-500'}>
+                                  (#{conv.shirtNumber})
+                                  {conv.position === 'Portera' && ' 🥅'}
+                                </span>
+                              )}
+                              {isDuplicate && <span className="text-red-500 text-xs">⚠️</span>}
+                            </div>
+                          );
+                        })}
                         {enrichedConvoked.length === 0 && (
                           <p className="text-sm text-blue-600 italic">Sin jugadoras convocadas</p>
                         )}
@@ -1678,14 +1769,21 @@ const TeamsList: React.FC = () => {
                 Selecciona las jugadoras que serán convocadas:
               </p>
               
+              {(() => {
+                const duplicateDorsals = getDuplicateDorsals(convocationPlayers);
+                return (
               <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
                 {convocationPlayers.length === 0 ? (
                   <p className="text-gray-500">No hay jugadoras en la convocatoria</p>
                 ) : (
-                  convocationPlayers.map(player => (
+                  convocationPlayers.map(player => {
+                    const isDuplicate = duplicateDorsals.has(player.shirt_number);
+                    const tooltipText = getDorsalTooltip(player.shirt_number, player.name, duplicateDorsals);
+                    return (
                     <label 
                       key={player.id} 
                       className={`flex items-center p-3 rounded-lg border cursor-pointer ${player.selected ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'}`}
+                      title={tooltipText}
                     >
                       <input 
                         type="checkbox" 
@@ -1693,13 +1791,17 @@ const TeamsList: React.FC = () => {
                         onChange={() => togglePlayerInConvocation(player.id)}
                         className="w-5 h-5 mr-3"
                       />
-                      <span className={player.selected ? 'text-gray-800' : 'text-gray-500'}>
-                        {player.position === 'Portera' ? '🥅 ' : ''}{player.name}{player.shirt_number ? ` (#${player.shirt_number})` : ''}
+                      <span className={player.selected ? (isDuplicate ? 'text-red-600 font-bold' : 'text-gray-800') : 'text-gray-500'}>
+                        {player.name}{player.shirt_number ? ` (#${player.shirt_number}${player.position === 'Portera' ? ' 🥅' : ''})` : (player.position === 'Portera' ? ' 🥅' : '')}
                       </span>
+                      {isDuplicate && <span className="ml-auto text-red-500 text-xs">⚠️</span>}
                     </label>
-                  ))
+                    );
+                  })
                 )}
               </div>
+                );
+              })()}
 
               <button
                 onClick={openAddPlayersModal}
@@ -1709,12 +1811,6 @@ const TeamsList: React.FC = () => {
               </button>
 
               <div className="flex gap-2">
-                <button
-                  onClick={shareConvocationAsImage}
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700"
-                >
-                  📤 Compartir
-                </button>
                 <button
                   onClick={saveConvocation}
                   className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
@@ -1734,24 +1830,26 @@ const TeamsList: React.FC = () => {
                 <div className="bg-white rounded-xl shadow-lg p-5">
                   <div className="text-center mb-4 pb-3 border-b border-gray-200">
                     <p className="text-xs text-gray-500 mb-2">🏑 CONVOCATORIA</p>
-                    <div className="flex items-center justify-center gap-3 mb-2">
-                      <img 
-                        src={selectedEventDetail?.team?.club?.logo_url || 'https://placehold.co/50x50?text=Local'} 
-                        alt="Local" 
-                        className="w-10 h-10 object-contain rounded-full"
-                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/50x50?text=Local'; }}
-                      />
-                      <div>
-                        <p className="font-bold text-lg text-gray-800">{eventClubName || eventTeamName}</p>
-                        <p className="text-gray-500 text-sm">vs</p>
-                        <p className="font-bold text-lg text-gray-800">{selectedEventDetail?.opponent || 'Rival'}</p>
+                    <div className="flex items-center justify-between mb-2 px-2">
+                      <div className="flex items-center gap-2">
+                        <img 
+                          src={selectedEventDetail?.team?.club?.logo_url || 'https://placehold.co/40x40?text=Local'} 
+                          alt="Local" 
+                          className="w-8 h-8 object-contain rounded-full"
+                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/40x40?text=Local'; }}
+                        />
+                        <span className="font-bold text-sm text-gray-800">{eventClubName || eventTeamName}</span>
                       </div>
-                      <img 
-                        src={opponentData?.logo_url || 'https://placehold.co/50x50?text=Visitante'} 
-                        alt="Visitante" 
-                        className="w-10 h-10 object-contain rounded-full"
-                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/50x50?text=Visitante'; }}
-                      />
+                      <span className="text-gray-400 text-xs">vs</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-gray-800">{selectedEventDetail?.opponent || 'Rival'}</span>
+                        <img 
+                          src={opponentData?.logo_url || 'https://placehold.co/40x40?text=Visitante'} 
+                          alt="Visitante" 
+                          className="w-8 h-8 object-contain rounded-full"
+                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/40x40?text=Visitante'; }}
+                        />
+                      </div>
                     </div>
                     <div className="flex items-center justify-center gap-1 mb-2">
                       {(() => {
@@ -1759,36 +1857,51 @@ const TeamsList: React.FC = () => {
                         return kitParts.map((color, i) => color ? (
                           <span 
                             key={i} 
-                            className="inline-block w-5 h-5 rounded-full border border-gray-300"
+                            className="inline-block w-4 h-4 rounded-full border border-gray-300"
                             style={{ backgroundColor: color }}
                           />
                         ) : null);
                       })()}
                     </div>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p>📅 {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : ''}</p>
-                      <p>🕐 {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <p>📅 {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : ''} - {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                      {(selectedEventDetail as any).convocation_time && (
+                        <p>🕑 Convocatoria: {new Date((selectedEventDetail as any).convocation_time).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
+                      )}
                       <p>📍 {selectedEventDetail?.location || 'Por confirmar'}</p>
                     </div>
                   </div>
                   
-                  <div className="mb-3">
-                    <p className="font-bold text-gray-800 text-center mb-2">
-                      CONVOCADAS ({convocationPlayers.filter(p => p.selected).length})
-                    </p>
-                    <div className="space-y-1">
-                      {convocationPlayers.filter(p => p.selected).sort((a, b) => a.name.localeCompare(b.name)).map((player, index) => (
-                        <div key={player.id} className="text-sm text-gray-700 flex items-center gap-2">
-                          <span className="w-5 text-center text-gray-400">{index + 1}.</span>
-                          <span>{player.position === 'Portera' ? '🥅' : '👤'}</span>
-                          <span className="font-medium">{player.name}</span>
-                          {player.shirt_number && (
-                            <span className="text-gray-500">#{player.shirt_number}</span>
-                          )}
-                        </div>
-                      ))}
+                  {(() => {
+                    const selectedPlayers = convocationPlayers.filter(p => p.selected).sort((a, b) => a.name.localeCompare(b.name));
+                    const duplicateDorsals = getDuplicateDorsals(selectedPlayers);
+                    return (
+                    <div className="mb-3">
+                      <p className="font-bold text-gray-800 text-center mb-2">
+                        CONVOCADAS
+                      </p>
+                      <div className="space-y-1">
+                        {selectedPlayers.map((player, index) => {
+                          const isDuplicate = duplicateDorsals.has(player.shirt_number);
+                          return (
+                          <div key={player.id} className={`text-sm text-gray-700 flex items-center gap-2 ${isDuplicate ? 'text-red-600 font-bold' : ''}`}>
+                            <span className="w-5 text-center text-gray-400">{index + 1}.</span>
+                            <span>{player.position === 'Portera' ? '🥅' : '👤'}</span>
+                            <span className="font-medium">{player.name}</span>
+                            {player.shirt_number && (
+                              <span>
+                                #{player.shirt_number}
+                                {player.position === 'Portera' && ' 🥅'}
+                              </span>
+                            )}
+                            {isDuplicate && <span className="text-red-500 text-xs">⚠️</span>}
+                          </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                    );
+                  })()}
                   
                   <div className="text-center pt-3 border-t border-gray-200">
                     <p className="text-xs text-gray-400">Club de Hockey Sanse Complutense</p>
@@ -1870,6 +1983,23 @@ const TeamsList: React.FC = () => {
               <button
                 onClick={() => setShowSuccessModal(false)}
                 className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700"
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de éxito al compartir */}
+        {showShareSuccessModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-xl p-6 max-w-sm w-full text-center">
+              <div className="text-5xl mb-4">✅</div>
+              <h3 className="text-xl font-bold mb-2 text-gray-800">¡Imagen copiada!</h3>
+              <p className="text-gray-600 mb-6">Pégala en WhatsApp</p>
+              <button
+                onClick={() => setShowShareSuccessModal(false)}
+                className="w-full bg-sanse-blue text-white py-2 rounded-lg hover:bg-blue-700"
               >
                 Aceptar
               </button>
