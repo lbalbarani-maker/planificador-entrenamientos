@@ -100,6 +100,11 @@ const TeamsList: React.FC = () => {
     return others ? `⚠️ Dorsal duplicado con: ${others}` : '';
   };
 
+  const isGoalkeeper = (position?: string): boolean => {
+    if (!position) return false;
+    return position.toLowerCase().includes('porter');
+  };
+
   useEffect(() => {
     loadData();
     const timeout = setTimeout(() => {
@@ -472,21 +477,23 @@ const TeamsList: React.FC = () => {
         setMatchData(hockeyMatch);
         
         if (selectedEventDetail.opponent) {
-          const { data: opponent } = await supabase
-            .from('opponent_teams')
-            .select('*')
-            .ilike('name', selectedEventDetail.opponent)
-            .single();
-          if (!opponent) {
-            const { data: opponentClub } = await supabase
-              .from('clubs')
-              .select('*')
-              .ilike('name', selectedEventDetail.opponent)
-              .single();
-            setOpponentData(opponentClub);
-          } else {
-            setOpponentData(opponent);
+          const { data: clubs } = await supabase.from('clubs').select('id, name, logo_url');
+          const clubsMap: Record<string, any> = {};
+          (clubs || []).forEach((c: any) => {
+            if (c.logo_url) clubsMap[c.name.toLowerCase()] = c;
+          });
+          
+          const opponentLower = selectedEventDetail.opponent?.toLowerCase() || '';
+          let opponentFound = clubsMap[opponentLower];
+          
+          if (!opponentFound) {
+            opponentFound = Object.values(clubsMap).find((c: any) => 
+              c.name.toLowerCase().includes(opponentLower) || 
+              opponentLower.includes(c.name.toLowerCase())
+            );
           }
+          
+          setOpponentData(opponentFound || null);
         }
       } catch (err) {
         console.error('Error fetching match data:', err);
@@ -1632,7 +1639,7 @@ const TeamsList: React.FC = () => {
                               {conv.shirtNumber && (
                                 <span className={isDuplicate ? 'text-red-600 font-bold' : 'text-gray-500'}>
                                   (#{conv.shirtNumber})
-                                  {conv.position === 'Portera' && ' 🥅'}
+                                  {isGoalkeeper(conv.position) && ' 🥅'}
                                 </span>
                               )}
                               {isDuplicate && <span className="text-red-500 text-xs">⚠️</span>}
@@ -1792,7 +1799,7 @@ const TeamsList: React.FC = () => {
                         className="w-5 h-5 mr-3"
                       />
                       <span className={player.selected ? (isDuplicate ? 'text-red-600 font-bold' : 'text-gray-800') : 'text-gray-500'}>
-                        {player.name}{player.shirt_number ? ` (#${player.shirt_number}${player.position === 'Portera' ? ' 🥅' : ''})` : (player.position === 'Portera' ? ' 🥅' : '')}
+                        {player.name}{player.shirt_number ? ` (#${player.shirt_number}${isGoalkeeper(player.position) ? ' 🥅' : ''})` : (isGoalkeeper(player.position) ? ' 🥅' : '')}
                       </span>
                       {isDuplicate && <span className="ml-auto text-red-500 text-xs">⚠️</span>}
                     </label>
@@ -1817,96 +1824,6 @@ const TeamsList: React.FC = () => {
                 >
                   Guardar ({convocationPlayers.filter(p => p.selected).length})
                 </button>
-              </div>
-            </div>
-            
-            {/* Hidden card for image generation */}
-            <div className="fixed -left-[9999px] top-0">
-              <div 
-                ref={shareCardRef}
-                className="bg-white p-6 w-[400px] font-sans"
-                style={{ background: 'linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%)' }}
-              >
-                <div className="bg-white rounded-xl shadow-lg p-5">
-                  <div className="text-center mb-4 pb-3 border-b border-gray-200">
-                    <p className="text-xs text-gray-500 mb-2">🏑 CONVOCATORIA</p>
-                    <div className="flex items-center justify-between mb-2 px-2">
-                      <div className="flex items-center gap-2">
-                        <img 
-                          src={selectedEventDetail?.team?.club?.logo_url || 'https://placehold.co/40x40?text=Local'} 
-                          alt="Local" 
-                          className="w-8 h-8 object-contain rounded-full"
-                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/40x40?text=Local'; }}
-                        />
-                        <span className="font-bold text-sm text-gray-800">{eventClubName || eventTeamName}</span>
-                      </div>
-                      <span className="text-gray-400 text-xs">vs</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-gray-800">{selectedEventDetail?.opponent || 'Rival'}</span>
-                        <img 
-                          src={opponentData?.logo_url || 'https://placehold.co/40x40?text=Visitante'} 
-                          alt="Visitante" 
-                          className="w-8 h-8 object-contain rounded-full"
-                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/40x40?text=Visitante'; }}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-center gap-1 mb-2">
-                      {(() => {
-                        const kitParts = (selectedEventDetail?.kit_color || '').split(';');
-                        return kitParts.map((color, i) => color ? (
-                          <span 
-                            key={i} 
-                            className="inline-block w-4 h-4 rounded-full border border-gray-300"
-                            style={{ backgroundColor: color }}
-                          />
-                        ) : null);
-                      })()}
-                    </div>
-                    <div className="text-xs text-gray-600 space-y-1">
-                      <p>📅 {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : ''} - {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
-                      {(selectedEventDetail as any).convocation_time && (
-                        <p>🕑 Convocatoria: {new Date((selectedEventDetail as any).convocation_time).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
-                      )}
-                      <p>📍 {selectedEventDetail?.location || 'Por confirmar'}</p>
-                    </div>
-                  </div>
-                  
-                  {(() => {
-                    const selectedPlayers = convocationPlayers.filter(p => p.selected).sort((a, b) => a.name.localeCompare(b.name));
-                    const duplicateDorsals = getDuplicateDorsals(selectedPlayers);
-                    return (
-                    <div className="mb-3">
-                      <p className="font-bold text-gray-800 text-center mb-2">
-                        CONVOCADAS
-                      </p>
-                      <div className="space-y-1">
-                        {selectedPlayers.map((player, index) => {
-                          const isDuplicate = duplicateDorsals.has(player.shirt_number);
-                          return (
-                          <div key={player.id} className={`text-sm text-gray-700 flex items-center gap-2 ${isDuplicate ? 'text-red-600 font-bold' : ''}`}>
-                            <span className="w-5 text-center text-gray-400">{index + 1}.</span>
-                            <span>{player.position === 'Portera' ? '🥅' : '👤'}</span>
-                            <span className="font-medium">{player.name}</span>
-                            {player.shirt_number && (
-                              <span>
-                                #{player.shirt_number}
-                                {player.position === 'Portera' && ' 🥅'}
-                              </span>
-                            )}
-                            {isDuplicate && <span className="text-red-500 text-xs">⚠️</span>}
-                          </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    );
-                  })()}
-                  
-                  <div className="text-center pt-3 border-t border-gray-200">
-                    <p className="text-xs text-gray-400">Club de Hockey Sanse Complutense</p>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -1937,7 +1854,7 @@ const TeamsList: React.FC = () => {
                         className="w-5 h-5 mr-3"
                       />
                       <span className={player.selected ? 'text-gray-800' : 'text-gray-600'}>
-                        {player.position === 'Portera' ? '🥅 ' : ''}{player.name}{player.shirt_number ? ` (#${player.shirt_number})` : ''}
+                        {isGoalkeeper(player.position) ? '🥅 ' : ''}{player.name}{player.shirt_number ? ` (#${player.shirt_number})` : ''}
                       </span>
                     </label>
                   ))
@@ -1986,6 +1903,98 @@ const TeamsList: React.FC = () => {
               >
                 Aceptar
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Hidden card for image generation */}
+        {eventHasConvocation && selectedEventDetail && (
+          <div className="fixed -left-[9999px] top-0">
+            <div 
+              ref={shareCardRef}
+              className="bg-white p-6 w-[400px] font-sans"
+              style={{ background: 'linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%)' }}
+            >
+              <div className="bg-white rounded-xl shadow-lg p-5">
+                <div className="text-center mb-4 pb-3 border-b border-gray-200">
+                  <p className="text-xs text-gray-500 mb-2">🏑 CONVOCATORIA</p>
+                  <div className="flex items-center justify-between mb-2 px-2">
+                    <div className="flex items-center gap-2">
+                      <img 
+                        src={selectedEventDetail?.team?.club?.logo_url || 'https://placehold.co/40x40?text=Local'} 
+                        alt="Local" 
+                        className="w-8 h-8 object-contain rounded-full"
+                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/40x40?text=Local'; }}
+                      />
+                      <span className="font-bold text-sm text-gray-800">{eventClubName || eventTeamName}</span>
+                    </div>
+                    <span className="text-gray-400 text-xs">vs</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-gray-800">{selectedEventDetail?.opponent || 'Rival'}</span>
+                      <img 
+                        src={opponentData?.logo_url || 'https://placehold.co/40x40?text=Visitante'} 
+                        alt="Visitante" 
+                        className="w-8 h-8 object-contain rounded-full"
+                        onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/40x40?text=Visitante'; }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-1 mb-2">
+                    {(() => {
+                      const kitParts = (selectedEventDetail?.kit_color || '').split(';');
+                      return kitParts.map((color, i) => color ? (
+                        <span 
+                          key={i} 
+                          className="inline-block w-4 h-4 rounded-full border border-gray-300"
+                          style={{ backgroundColor: color }}
+                        />
+                      ) : null);
+                    })()}
+                  </div>
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <p>📅 {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : ''} - {selectedEventDetail ? new Date(selectedEventDetail.start_datetime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                    {(selectedEventDetail as any).convocation_time && (
+                      <p>🕑 Convocatoria: {new Date((selectedEventDetail as any).convocation_time).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</p>
+                    )}
+                    <p>📍 {selectedEventDetail?.location || 'Por confirmar'}</p>
+                  </div>
+                </div>
+                
+                {(() => {
+                  const selectedPlayers = convocationPlayers.filter(p => p.selected).sort((a, b) => a.name.localeCompare(b.name));
+                  const duplicateDorsals = getDuplicateDorsals(selectedPlayers);
+                  return (
+                  <div className="mb-3">
+                    <p className="font-bold text-gray-800 text-center mb-2">
+                      CONVOCADAS
+                    </p>
+                    <div className="space-y-1">
+                      {selectedPlayers.map((player, index) => {
+                        const isDuplicate = duplicateDorsals.has(player.shirt_number);
+                        return (
+                        <div key={player.id} className={`text-sm text-gray-700 flex items-center gap-2 ${isDuplicate ? 'text-red-600 font-bold' : ''}`}>
+                          <span className="w-5 text-center text-gray-400">{index + 1}.</span>
+                          <span>{isGoalkeeper(player.position) ? '🥅' : '👤'}</span>
+                          <span className="font-medium">{player.name}</span>
+                          {player.shirt_number && (
+                            <span>
+                              #{player.shirt_number}
+                              {isGoalkeeper(player.position) && ' 🥅'}
+                            </span>
+                          )}
+                          {isDuplicate && <span className="text-red-500 text-xs">⚠️</span>}
+                        </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  );
+                })()}
+                
+                <div className="text-center pt-3 border-t border-gray-200">
+                  <p className="text-xs text-gray-400">Club de Hockey Sanse Complutense</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
