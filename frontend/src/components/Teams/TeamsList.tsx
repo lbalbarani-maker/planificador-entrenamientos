@@ -1980,7 +1980,6 @@ const TeamsList: React.FC = () => {
             >
               <div className="bg-white rounded-xl shadow-lg p-5">
                 <div className="text-center mb-4 pb-3 border-b border-gray-200">
-                  <p className="text-xs text-gray-500 mb-2">🏑 CONVOCATORIA</p>
                   <div className="flex items-center justify-between mb-2 px-2">
                     <div className="flex items-center gap-2">
                       <img 
@@ -2037,6 +2036,7 @@ const TeamsList: React.FC = () => {
                         return (
                         <div key={player.id} className={`text-sm text-gray-700 flex items-center gap-2 ${isDuplicate ? 'text-red-600 font-bold' : ''}`}>
                           <span className="w-5 text-center text-gray-400">{index + 1}.</span>
+                          <span>{isGoalkeeper(player.position) ? '🥅' : '👤'}</span>
                           <span className="font-medium">{player.name}</span>
                           {player.shirt_number && (
                             <span>
