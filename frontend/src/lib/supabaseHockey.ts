@@ -4,12 +4,19 @@ import {
   HockeyPlayer,
   HockeyGoal,
   HockeySave,
+  HockeyCard,
   HockeyMatchWithDetails,
+  MatchLineup,
+  MatchSubstitution,
   CreateMatchInput,
   UpdateMatchInput,
   EditMatchInput,
   AddGoalInput,
   AddSaveInput,
+  AddCardInput,
+  InitLineupInput,
+  ChangePlayerInput,
+  LineupPlayer,
 } from '../types/hockey';
 
 const getCurrentUser = async () => {
@@ -488,5 +495,205 @@ export const hockeyApi = {
     return () => {
       supabase.removeChannel(channel);
     };
+  },
+
+  async addCard(matchId: string, input: AddCardInput): Promise<HockeyCard> {
+    const { data, error } = await supabase
+      .from('match_cards')
+      .insert([
+        {
+          match_id: matchId,
+          team: input.team,
+          player_id: input.player_id || null,
+          player_name: input.player_name || null,
+          dorsal: input.dorsal || null,
+          card_type: input.card_type,
+          quarter: input.quarter,
+          match_minute: input.match_minute,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding card:', error);
+      throw error;
+    }
+
+    return data;
+  },
+
+  async getMatchCards(matchId: string): Promise<HockeyCard[]> {
+    const { data, error } = await supabase
+      .from('match_cards')
+      .select('*')
+      .eq('match_id', matchId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching match cards:', error);
+      return [];
+    }
+
+    return data || [];
+  },
+
+  async removeCard(cardId: string): Promise<void> {
+    const { error } = await supabase
+      .from('match_cards')
+      .delete()
+      .eq('id', cardId);
+
+    if (error) {
+      console.error('Error removing card:', error);
+      throw error;
+    }
+  },
+
+  async initLineup(matchId: string, team: 'team1' | 'team2', players: LineupPlayer[]): Promise<void> {
+    const lineups = players.map(p => ({
+      match_id: matchId,
+      player_id: p.player_id,
+      player_name: p.player_name,
+      dorsal: p.dorsal || null,
+      team,
+      is_on_field: true,
+      time_in_seconds: 0,
+      last_in_timestamp: new Date().toISOString(),
+    }));
+
+    const { error } = await supabase
+      .from('match_lineups')
+      .insert(lineups);
+
+    if (error) {
+      console.error('Error initializing lineup:', error);
+      throw error;
+    }
+  },
+
+  async getLineup(matchId: string): Promise<MatchLineup[]> {
+    const { data, error } = await supabase
+      .from('match_lineups')
+      .select('*')
+      .eq('match_id', matchId)
+      .order('is_on_field', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching lineup:', error);
+      return [];
+    }
+
+    return data || [];
+  },
+
+  async changePlayer(matchId: string, input: ChangePlayerInput): Promise<void> {
+    const now = new Date().toISOString();
+
+    const { data: lineup, error: fetchError } = await supabase
+      .from('match_lineups')
+      .select('*')
+      .eq('match_id', matchId)
+      .eq('team', input.team)
+      .eq('player_id', input.player_out_id)
+      .single();
+
+    if (fetchError || !lineup) {
+      console.error('Error fetching player to change out:', fetchError);
+      throw fetchError;
+    }
+
+    const timeInSeconds = lineup.time_in_seconds + Math.floor(
+      (new Date().getTime() - new Date(lineup.last_in_timestamp).getTime()) / 1000
+    );
+
+    await supabase
+      .from('match_lineups')
+      .update({
+        is_on_field: false,
+        time_in_seconds: timeInSeconds,
+      })
+      .eq('id', lineup.id);
+
+    const { data: newPlayer, error: newPlayerError } = await supabase
+      .from('match_lineups')
+      .select('*')
+      .eq('match_id', matchId)
+      .eq('team', input.team)
+      .eq('player_id', input.player_in_id)
+      .single();
+
+    if (newPlayerError || !newPlayer) {
+      console.error('Error finding new player in lineup:', newPlayerError);
+      throw newPlayerError;
+    }
+
+    await supabase
+      .from('match_lineups')
+      .update({
+        is_on_field: true,
+        last_in_timestamp: now,
+      })
+      .eq('id', newPlayer.id);
+
+    const { data: match } = await supabase
+      .from('hockey_matches')
+      .select('quarter, remaining_time, quarter_duration')
+      .eq('id', matchId)
+      .single();
+
+    const matchMinute = match ? (match.quarter - 1) * (match.quarter_duration / 60) + Math.floor((match.quarter_duration - match.remaining_time) / 60) : 0;
+
+    await supabase
+      .from('match_substitutions')
+      .insert({
+        match_id: matchId,
+        player_out_id: input.player_out_id,
+        player_in_id: input.player_in_id,
+        player_in_name: input.player_in_name,
+        player_in_dorsal: input.player_in_dorsal || null,
+        team: input.team,
+        quarter: match?.quarter || 1,
+        match_minute: matchMinute,
+      });
+  },
+
+  async quickSubstitution(matchId: string, team: 'team1' | 'team2'): Promise<void> {
+    const { data: lastSub, error } = await supabase
+      .from('match_substitutions')
+      .select('*')
+      .eq('match_id', matchId)
+      .eq('team', team)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !lastSub) {
+      console.error('No previous substitution found:', error);
+      throw error || new Error('No previous substitution');
+    }
+
+    await this.changePlayer(matchId, {
+      player_out_id: lastSub.player_in_id,
+      player_in_id: lastSub.player_out_id,
+      player_in_name: lastSub.player_out_name,
+      player_in_dorsal: lastSub.player_out_dorsal || undefined,
+      team,
+    });
+  },
+
+  async getSubstitutions(matchId: string): Promise<MatchSubstitution[]> {
+    const { data, error } = await supabase
+      .from('match_substitutions')
+      .select('*')
+      .eq('match_id', matchId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching substitutions:', error);
+      return [];
+    }
+
+    return data || [];
   },
 };

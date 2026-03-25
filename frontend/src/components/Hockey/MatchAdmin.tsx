@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { convocationApi, clubsApi, eventsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
-import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave } from '../../types/hockey';
+import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave, HockeyCard, MatchLineup, CardType } from '../../types/hockey';
 
 const MatchAdmin: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +39,23 @@ const MatchAdmin: React.FC = () => {
   const [selectedGoalkeeper, setSelectedGoalkeeper] = useState<string>('');
   const [customGoalkeeperName, setCustomGoalkeeperName] = useState('');
   const [customGoalkeeperNumber, setCustomGoalkeeperNumber] = useState('');
+  
+  // Cards
+  const [cards, setCards] = useState<HockeyCard[]>([]);
+  const [showCardModal, setShowCardModal] = useState(false);
+  const [cardTeam, setCardTeam] = useState<'team1' | 'team2'>('team1');
+  const [cardType, setCardType] = useState<CardType>('yellow');
+  const [selectedCardPlayer, setSelectedCardPlayer] = useState<string>('');
+  
+  // Penalty/Stroke
+  const [showPenaltyModal, setShowPenaltyModal] = useState(false);
+  const [penaltyType, setPenaltyType] = useState<'penalty' | 'stroke'>('penalty');
+  const [penaltyTeam, setPenaltyTeam] = useState<'team1' | 'team2'>('team1');
+  const [penaltyResult, setPenaltyResult] = useState<'goal' | 'miss' | null>(null);
+  
+  // Lineup
+  const [lineup, setLineup] = useState<MatchLineup[]>([]);
+  const [showLineupModal, setShowLineupModal] = useState(false);
 
   useEffect(() => {
     if (id) loadMatch();
@@ -230,15 +247,19 @@ const MatchAdmin: React.FC = () => {
       setTeam1Logo(logo1);
       setTeam2Logo(logo2);
 
-      const [playersData, goalsData, savesData] = await Promise.all([
+      const [playersData, goalsData, savesData, cardsData, lineupData] = await Promise.all([
         hockeyApi.getMatchPlayers(id!),
         hockeyApi.getMatchGoals(id!),
         hockeyApi.getMatchSaves(id!),
+        hockeyApi.getMatchCards(id!),
+        hockeyApi.getLineup(id!),
       ]);
       
       setPlayers(playersData);
       setGoals(goalsData);
       setSaves(savesData);
+      setCards(cardsData);
+      setLineup(lineupData);
 
       if (!matchData.admin_pin_hash) {
         setIsAdmin(true);
@@ -719,6 +740,27 @@ const MatchAdmin: React.FC = () => {
               >
                 🔄
               </button>
+              <button
+                onClick={() => { setPenaltyType('penalty'); setPenaltyTeam('team1'); setPenaltyResult(null); setShowPenaltyModal(true); }}
+                className="bg-yellow-500 text-white px-3 py-2 rounded-lg text-sm md:text-base"
+                title="Penalty"
+              >
+                🟡
+              </button>
+              <button
+                onClick={() => { setPenaltyType('stroke'); setPenaltyTeam('team1'); setPenaltyResult(null); setShowPenaltyModal(true); }}
+                className="bg-red-500 text-white px-3 py-2 rounded-lg text-sm md:text-base"
+                title="Stroke"
+              >
+                🔴
+              </button>
+              <button
+                onClick={() => { setCardTeam('team1'); setCardType('yellow'); setSelectedCardPlayer(''); setShowCardModal(true); }}
+                className="bg-orange-600 text-white px-3 py-2 rounded-lg text-sm md:text-base"
+                title="Tarjeta"
+              >
+                🟥
+              </button>
             </div>
           </div>
 
@@ -1114,6 +1156,191 @@ const MatchAdmin: React.FC = () => {
                   className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold"
                 >
                   Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Tarjeta */}
+        {showCardModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#071025] rounded-2xl p-6 max-w-md w-full border border-white/10">
+              <h3 className="text-xl font-bold text-white mb-4">Tarjeta</h3>
+              
+              <div className="mb-4">
+                <label className="text-gray-400 text-sm block mb-2">Tipo de tarjeta</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCardType('green')}
+                    className={`flex-1 py-3 rounded-lg font-bold ${cardType === 'green' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    🟢 Verde
+                  </button>
+                  <button
+                    onClick={() => setCardType('yellow')}
+                    className={`flex-1 py-3 rounded-lg font-bold ${cardType === 'yellow' ? 'bg-yellow-500 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    🟡 Amarilla
+                  </button>
+                  <button
+                    onClick={() => setCardType('red')}
+                    className={`flex-1 py-3 rounded-lg font-bold ${cardType === 'red' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    🔴 Roja
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="text-gray-400 text-sm block mb-2">Equipo</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCardTeam('team1')}
+                    className={`flex-1 py-2 rounded-lg ${cardTeam === 'team1' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    {match?.team1_name || 'Team 1'}
+                  </button>
+                  <button
+                    onClick={() => setCardTeam('team2')}
+                    className={`flex-1 py-2 rounded-lg ${cardTeam === 'team2' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    {match?.team2_name || 'Team 2'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="text-gray-400 text-sm block mb-2">Jugadora</label>
+                <select
+                  value={selectedCardPlayer}
+                  onChange={(e) => setSelectedCardPlayer(e.target.value)}
+                  className="w-full p-3 rounded-lg bg-white/10 text-white border border-white/20"
+                >
+                  <option value="">Seleccionar jugadora...</option>
+                  {convocationPlayers.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.dorsal})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCardModal(false)}
+                  className="flex-1 bg-gray-600 text-white py-3 rounded-lg font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!match || !isAdmin) return;
+                    const qDuration = match.quarter_duration;
+                    const elapsedInQuarter = qDuration - displayTime;
+                    const secondsBefore = (match.quarter - 1) * qDuration;
+                    const matchMinute = Math.floor((secondsBefore + elapsedInQuarter) / 60);
+
+                    const player = convocationPlayers.find(p => p.id === selectedCardPlayer);
+                    await hockeyApi.addCard(match.id, {
+                      team: cardTeam,
+                      card_type: cardType,
+                      player_id: selectedCardPlayer || undefined,
+                      player_name: player?.name || 'Anónimo',
+                      dorsal: player?.dorsal,
+                      quarter: match.quarter,
+                      match_minute: matchMinute,
+                    });
+
+                    const updatedCards = await hockeyApi.getMatchCards(match.id);
+                    setCards(updatedCards);
+                    setShowCardModal(false);
+                  }}
+                  className="flex-1 bg-orange-600 text-white py-3 rounded-lg font-bold"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Penalty/Stroke */}
+        {showPenaltyModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#071025] rounded-2xl p-6 max-w-md w-full border border-white/10">
+              <h3 className="text-xl font-bold text-white mb-4">
+                {penaltyType === 'penalty' ? '🟡 Penalty' : '🔴 Stroke'}
+              </h3>
+              
+              <div className="mb-4">
+                <label className="text-gray-400 text-sm block mb-2">Resultado</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPenaltyResult('miss')}
+                    className={`flex-1 py-4 rounded-lg font-bold text-lg ${penaltyResult === 'miss' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    ❌ FALLADO
+                  </button>
+                  <button
+                    onClick={() => setPenaltyResult('goal')}
+                    className={`flex-1 py-4 rounded-lg font-bold text-lg ${penaltyResult === 'goal' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    ✅ GOL
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="text-gray-400 text-sm block mb-2">Equipo</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPenaltyTeam('team1')}
+                    className={`flex-1 py-2 rounded-lg ${penaltyTeam === 'team1' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    {match?.team1_name || 'Team 1'}
+                  </button>
+                  <button
+                    onClick={() => setPenaltyTeam('team2')}
+                    className={`flex-1 py-2 rounded-lg ${penaltyTeam === 'team2' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                  >
+                    {match?.team2_name || 'Team 2'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowPenaltyModal(false)}
+                  className="flex-1 bg-gray-600 text-white py-3 rounded-lg font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!match || !isAdmin || !penaltyResult) return;
+
+                    if (penaltyResult === 'goal') {
+                      setGoalTeam(penaltyType === 'penalty' ? penaltyTeam : penaltyTeam);
+                      setShowGoalModal(true);
+                      setShowPenaltyModal(false);
+                    } else {
+                      const qDuration = match.quarter_duration;
+                      const elapsedInQuarter = qDuration - displayTime;
+                      const secondsBefore = (match.quarter - 1) * qDuration;
+                      const matchMinute = Math.floor((secondsBefore + elapsedInQuarter) / 60);
+
+                      await supabase.from('match_events').insert({
+                        match_id: match.id,
+                        event_type: penaltyType === 'penalty' ? 'penalty_miss' : 'stroke_miss',
+                        team_id: penaltyTeam,
+                        minute: matchMinute,
+                      });
+
+                      setShowPenaltyModal(false);
+                    }
+                  }}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold"
+                >
+                  Confirmar
                 </button>
               </div>
             </div>

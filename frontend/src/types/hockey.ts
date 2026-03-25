@@ -64,6 +64,46 @@ export interface HockeySave {
   timestamp: string;
 }
 
+export type CardType = 'green' | 'yellow' | 'red';
+
+export interface HockeyCard {
+  id: string;
+  match_id: string;
+  team: 'team1' | 'team2';
+  player_id?: string;
+  player_name?: string;
+  dorsal?: string;
+  card_type: CardType;
+  quarter: number;
+  match_minute: number;
+  created_at: string;
+}
+
+export interface MatchLineup {
+  id: string;
+  match_id: string;
+  player_id: string;
+  player_name: string;
+  dorsal?: string;
+  team: 'team1' | 'team2';
+  is_on_field: boolean;
+  time_in_seconds: number;
+  last_in_timestamp: string | null;
+}
+
+export interface MatchSubstitution {
+  id: string;
+  match_id: string;
+  player_out_id: string;
+  player_out_name: string;
+  player_in_id: string;
+  player_in_name: string;
+  team: 'team1' | 'team2';
+  quarter: number;
+  match_minute: number;
+  created_at: string;
+}
+
 export interface HockeyMatchWithDetails extends HockeyMatch {
   players?: HockeyPlayer[];
   goals?: HockeyGoal[];
@@ -136,6 +176,36 @@ export interface AddSaveInput {
   quarter: number;
   elapsed_in_quarter?: number;
   match_minute: number;
+}
+
+export interface AddCardInput {
+  team: 'team1' | 'team2';
+  player_id?: string;
+  player_name?: string;
+  dorsal?: string;
+  card_type: CardType;
+  quarter: number;
+  match_minute: number;
+}
+
+export interface LineupPlayer {
+  player_id: string;
+  player_name: string;
+  dorsal?: string;
+  is_goalkeeper?: boolean;
+}
+
+export interface InitLineupInput {
+  players: LineupPlayer[];
+  team: 'team1' | 'team2';
+}
+
+export interface ChangePlayerInput {
+  player_out_id: string;
+  player_in_id: string;
+  player_in_name: string;
+  player_in_dorsal?: string;
+  team: 'team1' | 'team2';
 }
 
 export interface TeamSetupData {
