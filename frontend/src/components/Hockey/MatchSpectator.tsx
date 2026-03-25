@@ -81,7 +81,21 @@ const MatchSpectator: React.FC = () => {
     if (!match) return;
 
     const channel = supabase
-      .channel("match-updates")
+      .channel(`match-${match.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "hockey_matches",
+          filter: `id=eq.${match.id}`,
+        },
+        (payload: any) => {
+          if (payload.new) {
+            setMatch((prev) => prev ? { ...prev, ...payload.new } : payload.new);
+          }
+        }
+      )
       .on(
         "postgres_changes",
         {

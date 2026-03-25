@@ -26,6 +26,7 @@ import { NotificationSettingsPage } from './pages/NotificationSettings';
 import { AdminPushPage } from './pages/AdminPush';
 import { OfflineBanner } from './components/notifications/OfflineBanner';
 import { InstallPromptBanner } from './components/notifications/InstallPromptBanner';
+import UpdateBanner from './components/UpdateBanner';
 import './App.css';
 
 const hasRole = (roleString: string | undefined, role: string): boolean => {
@@ -82,6 +83,7 @@ function App() {
     <Router>
       <OfflineBanner />
       <InstallPromptBanner />
+      <UpdateBanner />
       <Routes>
         {/* Rutas públicas */}
         <Route path="/training/:shareId" element={<PublicTraining />} />
