@@ -50,15 +50,13 @@ const getCurrentUser = async () => {
 export const teamsApi = {
   async getTeams(): Promise<Team[]> {
     const userData = localStorage.getItem('user');
-    console.log('getTeams - user from localStorage:', userData ? JSON.parse(userData) : null);
+    if (!userData) throw new Error('Usuario no autenticado');
     
     const { data, error } = await supabase
       .from('teams')
       .select('*, club:clubs(id, name, logo_url, primary_color, secondary_color)')
       .order('created_at', { ascending: false });
 
-    console.log('getTeams - query result:', { data, error });
-    
     if (error) {
       console.error('getTeams - error:', error);
       throw error;

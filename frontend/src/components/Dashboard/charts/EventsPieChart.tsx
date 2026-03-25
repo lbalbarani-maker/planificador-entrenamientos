@@ -17,7 +17,7 @@ export const EventsPieChart: React.FC<EventsPieChartProps> = ({ data }) => {
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <h3 className="font-bold text-gray-800 mb-4">🥧 Distribución de Eventos</h3>
-      <div className="h-48">
+      <div className="h-48 min-h-[192px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie

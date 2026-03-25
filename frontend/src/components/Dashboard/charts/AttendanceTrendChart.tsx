@@ -15,7 +15,7 @@ export const AttendanceTrendChart: React.FC<AttendanceTrendChartProps> = ({ data
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
       <h3 className="font-bold text-gray-800 mb-4">📈 Tendencia de Asistencia</h3>
-      <div className="h-48">
+      <div className="h-48 min-h-[192px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
