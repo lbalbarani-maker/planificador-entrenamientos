@@ -44,8 +44,8 @@ export const LotterySellersSection: React.FC<LotterySellersSectionProps> = ({
         {topTeamSellers.length > 0 && (
           <div>
             <h4 className="text-sm font-semibold text-gray-600 mb-2">🏅 Top Equipos</h4>
-            <div className="h-36 min-h-[144px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-36">
+              <ResponsiveContainer width="100%" height={150}>
                 <BarChart 
                   data={topTeamSellers.slice(0, 5)} 
                   margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
