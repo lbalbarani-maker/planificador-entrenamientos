@@ -1,39 +1,51 @@
 import { useState, useEffect, useRef } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 
-function UpdateBanner() {
+export default function UpdateBanner() {
   const [showModal, setShowModal] = useState(false);
-  const setShowModalRef = useRef(setShowModal);
+  
+  const updateSW = useRef(registerSW({
+    onNeedRefresh() {
+      setShowModal(true);
+    },
+    onOfflineReady() {
+      console.log('App lista offline');
+    },
+  }));
 
   useEffect(() => {
-    setShowModalRef.current = setShowModal;
-  }, [setShowModal]);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.update();
+      });
+    }
+  }, []);
 
   useEffect(() => {
-    const updateSW = registerSW({
-      onNeedRefresh() {
-        setShowModalRef.current(true);
-      },
-      onOfflineReady() {
-        console.log('App lista offline');
-      },
-    });
+    const interval = setInterval(() => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.update();
+        });
+      }
+    }, 60 * 1000);
 
-    // Check for updates on mount
-    updateSW(true);
+    return () => clearInterval(interval);
   }, []);
 
   const handleUpdate = () => {
-    window.location.reload();
+    updateSW.current(true);
   };
 
   if (!showModal) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90">
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[9999]">
       <div className="bg-white p-8 rounded-xl text-center max-w-md mx-4">
         <div className="text-5xl mb-4">🔄</div>
-        <h2 className="text-2xl font-bold mb-4 text-gray-800">Actualización Requerida</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800">
+          Actualización Requerida
+        </h2>
         <p className="text-gray-600 mb-6">
           Hay una nueva versión disponible. Debes actualizar para continuar usando la app.
         </p>
@@ -47,5 +59,3 @@ function UpdateBanner() {
     </div>
   );
 }
-
-export default UpdateBanner;
