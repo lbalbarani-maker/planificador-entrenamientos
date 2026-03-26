@@ -19,7 +19,6 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { useRolePermissions } from '../hooks/useRolePermissions';
 import {
   KPICardsSection,
-  ChartsSection,
   BirthdaysSection,
   TrainingStatsSection,
   LotterySellersSection,
@@ -333,13 +332,6 @@ const Dashboard: React.FC = () => {
 
               {/* KPIs */}
               <KPICardsSection data={dashboardData.kpi} />
-
-              {/* Gráficos Interactivos */}
-              <ChartsSection 
-                attendanceTrend={dashboardData.attendanceTrend}
-                eventsDistribution={dashboardData.eventsDistribution}
-                teamPerformance={dashboardData.teamPerformance}
-              />
 
               {/* Mis Convocatorias */}
               <MyConvocations />
