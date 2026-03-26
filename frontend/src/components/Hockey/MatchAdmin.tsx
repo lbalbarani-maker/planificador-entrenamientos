@@ -54,6 +54,7 @@ const MatchAdmin: React.FC = () => {
   const [penaltyTeam, setPenaltyTeam] = useState<'team1' | 'team2'>('team1');
   const [penaltyResult, setPenaltyResult] = useState<'goal' | 'miss' | null>(null);
   const [penalties, setPenalties] = useState<PenaltyEvent[]>([]);
+  const [pendingPenaltyGoal, setPendingPenaltyGoal] = useState<{type: 'penalty' | 'stroke', team: 'team1' | 'team2'} | null>(null);
   
   // Lineup
   const [lineup, setLineup] = useState<MatchLineup[]>([]);
@@ -210,6 +211,30 @@ const MatchAdmin: React.FC = () => {
         },
         () => {
           hockeyApi.getMatchSaves(id!).then(setSaves);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'match_cards',
+          filter: `match_id=eq.${id}`,
+        },
+        () => {
+          hockeyApi.getMatchCards(id!).then(setCards);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'match_events',
+          filter: `match_id=eq.${id}`,
+        },
+        () => {
+          hockeyApi.getMatchPenalties(id!).then(setPenalties);
         }
       )
       .subscribe();
@@ -497,27 +522,54 @@ const MatchAdmin: React.FC = () => {
       }
     }
 
+    const isPenaltyGoal = pendingPenaltyGoal !== null;
+    const finalPlayerName = customPlayerName || selectedPlayerName;
+    const finalDorsal = customPlayerNumber || selectedPlayerDorsal;
+
     await hockeyApi.addGoal(match.id, {
       team: goalTeam,
       player_id: selectedPlayerId,
-      player_name: customPlayerName || selectedPlayerName,
-      dorsal: customPlayerNumber || selectedPlayerDorsal,
+      player_name: finalPlayerName,
+      dorsal: finalDorsal,
       quarter: match.quarter,
       elapsed_in_quarter: elapsedInQuarter,
       match_minute: matchMinute,
-      is_penalty: false,
+      is_penalty: isPenaltyGoal,
     });
 
-    const [updatedGoals, updatedMatch] = await Promise.all([
+    // Si es gol de penalty/stroke, guardar también en match_events
+    if (pendingPenaltyGoal) {
+      try {
+        await hockeyApi.addPenalty(match.id, {
+          event_type: pendingPenaltyGoal.type === 'penalty' ? 'penalty_goal' : 'stroke_goal',
+          team: pendingPenaltyGoal.team,
+          player_id: selectedPlayerId,
+          player_name: finalPlayerName,
+          dorsal: finalDorsal,
+          quarter: match.quarter,
+          match_minute: matchMinute,
+        });
+      } catch (error) {
+        console.error('Error saving penalty event:', error);
+      }
+    }
+
+    const [updatedGoals, updatedMatch, updatedPenalties] = await Promise.all([
       hockeyApi.getMatchGoals(id!),
       hockeyApi.getMatch(id!),
+      hockeyApi.getMatchPenalties(id!),
     ]);
     
     setGoals(updatedGoals);
+    setPenalties(updatedPenalties);
     if (updatedMatch) setMatch(updatedMatch);
     
     setShowGoalModal(false);
     setGoalTeam(null);
+    setPendingPenaltyGoal(null);
+    setSelectedPlayer('');
+    setCustomPlayerName('');
+    setCustomPlayerNumber('');
   };
 
   const triggerSave = () => {
@@ -987,6 +1039,9 @@ const MatchAdmin: React.FC = () => {
                       <span className="text-white text-xs md:text-sm">
                         {goal.player_name} {goal.dorsal && `#${goal.dorsal}`}
                       </span>
+                      {goal.is_penalty && (
+                        <span className="text-yellow-400 text-xs font-bold">(PC)</span>
+                      )}
                     </div>
                     <button
                       onClick={() => hockeyApi.removeGoal(goal.id).then(loadMatch)}
@@ -1048,10 +1103,10 @@ const MatchAdmin: React.FC = () => {
 
         {/* Historial de Penaltis/Penaltys */}
         <div className="bg-white/10 rounded-xl p-3 md:p-4 border border-white/10 mb-4">
-          <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penaltis / Penaltys ({penalties.length})</h3>
+          <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penalty corner / Stroke ({penalties.length})</h3>
           <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
             {penalties.length === 0 ? (
-              <p className="text-gray-400 text-xs md:text-sm">Sin penaltis/penaltys registrados</p>
+              <p className="text-gray-400 text-xs md:text-sm">Sin penalties/strokes registrados</p>
             ) : (
               penalties.map(penalty => (
                 <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
@@ -1069,7 +1124,7 @@ const MatchAdmin: React.FC = () => {
                       {penalty.team === 'team1' ? match.team1_name : match.team2_name}
                     </span>
                     <span className="text-gray-300 text-xs">
-                      {penalty.event_type.includes('penalty') ? 'Penalty' : 'Penalty Corner'}
+                      {penalty.event_type.includes('penalty') ? 'PC' : 'Stroke'}
                     </span>
                     <span className="text-gray-400 text-xs">
                       Q{penalty.quarter} - {penalty.match_minute}'
@@ -1493,27 +1548,29 @@ const MatchAdmin: React.FC = () => {
                     if (!match || !isAdmin || !penaltyResult) return;
 
                     if (penaltyResult === 'goal') {
-                      // Para goles, abrir el modal de gol con flag de penalty
+                      // Para goles, abrir el modal de gol y guardar penalty después
                       setGoalTeam(penaltyTeam);
+                      setPendingPenaltyGoal({ type: penaltyType, team: penaltyTeam });
                       setShowGoalModal(true);
                       setShowPenaltyModal(false);
                     } else {
                       // Guardar penalty/stroke fallado
-                      const qDuration = match.quarter_duration;
-                      const elapsedInQuarter = qDuration - displayTime;
-                      const secondsBefore = (match.quarter - 1) * qDuration;
-                      const matchMinute = Math.floor((secondsBefore + elapsedInQuarter) / 60);
+                      try {
+                        await hockeyApi.addPenalty(match.id, {
+                          event_type: penaltyType === 'penalty' ? 'penalty_miss' : 'stroke_miss',
+                          team: penaltyTeam,
+                          quarter: match.quarter,
+                          match_minute: Math.floor(((match.quarter - 1) * match.quarter_duration + (match.quarter_duration - displayTime)) / 60),
+                        });
 
-                      await hockeyApi.addPenalty(match.id, {
-                        event_type: penaltyType === 'penalty' ? 'penalty_miss' : 'stroke_miss',
-                        team: penaltyTeam,
-                        quarter: match.quarter,
-                        match_minute: matchMinute,
-                      });
-
-                      const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
-                      setPenalties(updatedPenalties);
-                      setShowPenaltyModal(false);
+                        const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
+                        setPenalties(updatedPenalties);
+                        setShowPenaltyModal(false);
+                        setPenaltyResult(null);
+                      } catch (error) {
+                        console.error('Error saving penalty miss:', error);
+                        alert('Error al guardar el penalty fallado');
+                      }
                     }
                   }}
                   className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold"

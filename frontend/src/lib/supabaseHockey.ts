@@ -718,6 +718,7 @@ export const hockeyApi = {
         player_name: input.player_name || null,
         dorsal: input.dorsal || null,
         minute: input.match_minute,
+        quarter: input.quarter,
       }]);
 
     if (error) {

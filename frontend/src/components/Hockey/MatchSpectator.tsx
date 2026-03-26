@@ -127,6 +127,30 @@ const MatchSpectator: React.FC = () => {
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "match_cards",
+          filter: `match_id=eq.${match.id}`,
+        },
+        () => {
+          hockeyApi.getMatchCards(match.id).then(setCards);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "match_events",
+          filter: `match_id=eq.${match.id}`,
+        },
+        () => {
+          hockeyApi.getMatchPenalties(match.id).then(setPenalties);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -487,6 +511,9 @@ const MatchSpectator: React.FC = () => {
                   <span className="text-white text-xs md:text-sm">
                     {goal.player_name} {goal.dorsal && `#${goal.dorsal}`}
                   </span>
+                  {goal.is_penalty && (
+                    <span className="text-yellow-400 text-xs font-bold">(PC)</span>
+                  )}
                 </div>
               </div>
             ))
@@ -554,7 +581,7 @@ const MatchSpectator: React.FC = () => {
 
       {/* Penaltis/Penaltys */}
       <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-white/20 mt-2">
-        <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penaltis / Penaltys ({penalties.length})</h3>
+        <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penalty corner / Stroke ({penalties.length})</h3>
         {penalties.length > 0 ? (
           <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
             {penalties.map(penalty => (
@@ -573,7 +600,7 @@ const MatchSpectator: React.FC = () => {
                     {penalty.team === 'team1' ? match.team1_name : match.team2_name}
                   </span>
                   <span className="text-gray-300 text-xs">
-                    {penalty.event_type.includes('penalty') ? 'Penalty' : 'Penalty Corner'}
+                    {penalty.event_type.includes('penalty') ? 'PC' : 'Stroke'}
                   </span>
                   <span className="text-gray-400 text-xs">
                     Q{penalty.quarter} - {penalty.match_minute}'
@@ -583,7 +610,7 @@ const MatchSpectator: React.FC = () => {
             ))}
           </div>
         ) : (
-          <p className="text-gray-400 text-xs md:text-sm">Sin penaltis/penaltys registrados</p>
+          <p className="text-gray-400 text-xs md:text-sm">Sin penalties/strokes registrados</p>
         )}
       </div>
 
