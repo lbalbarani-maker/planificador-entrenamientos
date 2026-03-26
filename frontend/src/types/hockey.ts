@@ -236,3 +236,37 @@ export interface PlayerData {
   position: string;
   selected: boolean;
 }
+
+export interface PenaltyEvent {
+  id: string;
+  match_id: string;
+  event_type: 'penalty_goal' | 'penalty_miss' | 'stroke_goal' | 'stroke_miss';
+  team: 'team1' | 'team2';
+  player_id?: string;
+  player_name?: string;
+  dorsal?: string;
+  quarter: number;
+  match_minute: number;
+  created_at: string;
+}
+
+export interface HockeyShootout {
+  id: string;
+  match_id: string;
+  team: 'team1' | 'team2';
+  player_id?: string;
+  player_name: string;
+  dorsal?: string;
+  scored: boolean;
+  round_number: number;
+  created_at: string;
+}
+
+export interface AddShootoutInput {
+  team: 'team1' | 'team2';
+  player_id?: string;
+  player_name: string;
+  dorsal?: string;
+  scored: boolean;
+  round_number: number;
+}

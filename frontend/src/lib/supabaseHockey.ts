@@ -17,6 +17,8 @@ import {
   InitLineupInput,
   ChangePlayerInput,
   LineupPlayer,
+  HockeyShootout,
+  AddShootoutInput,
 } from '../types/hockey';
 
 const getCurrentUser = async () => {
@@ -695,5 +697,121 @@ export const hockeyApi = {
     }
 
     return data || [];
+  },
+
+  async addPenalty(matchId: string, input: {
+    event_type: 'penalty_goal' | 'penalty_miss' | 'stroke_goal' | 'stroke_miss';
+    team: 'team1' | 'team2';
+    player_id?: string;
+    player_name?: string;
+    dorsal?: string;
+    quarter: number;
+    match_minute: number;
+  }): Promise<void> {
+    const { error } = await supabase
+      .from('match_events')
+      .insert([{
+        match_id: matchId,
+        event_type: input.event_type,
+        team_id: input.team,
+        player_id: input.player_id || null,
+        player_name: input.player_name || null,
+        dorsal: input.dorsal || null,
+        minute: input.match_minute,
+      }]);
+
+    if (error) {
+      console.error('Error adding penalty:', error);
+      throw error;
+    }
+  },
+
+  async getMatchPenalties(matchId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('match_events')
+      .select('*')
+      .eq('match_id', matchId)
+      .in('event_type', ['penalty_goal', 'penalty_miss', 'stroke_goal', 'stroke_miss'])
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching penalties:', error);
+      return [];
+    }
+
+    return (data || []).map((event: any) => ({
+      id: event.id,
+      match_id: event.match_id,
+      event_type: event.event_type,
+      team: event.team_id,
+      player_id: event.player_id,
+      player_name: event.player_name,
+      dorsal: event.dorsal,
+      quarter: event.quarter || 4,
+      match_minute: event.minute || 0,
+      created_at: event.created_at,
+    }));
+  },
+
+  async removePenalty(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('match_events')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error removing penalty:', error);
+      throw error;
+    }
+  },
+
+  async addShootout(matchId: string, input: AddShootoutInput): Promise<HockeyShootout> {
+    const { data, error } = await supabase
+      .from('match_shootouts')
+      .insert([{
+        match_id: matchId,
+        team: input.team,
+        player_id: input.player_id || null,
+        player_name: input.player_name,
+        dorsal: input.dorsal || null,
+        scored: input.scored,
+        round_number: input.round_number,
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding shootout:', error);
+      throw error;
+    }
+
+    return data;
+  },
+
+  async getMatchShootouts(matchId: string): Promise<HockeyShootout[]> {
+    const { data, error } = await supabase
+      .from('match_shootouts')
+      .select('*')
+      .eq('match_id', matchId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching shootouts:', error);
+      return [];
+    }
+
+    return data || [];
+  },
+
+  async removeShootout(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('match_shootouts')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error removing shootout:', error);
+      throw error;
+    }
   },
 };

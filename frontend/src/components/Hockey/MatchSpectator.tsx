@@ -4,7 +4,7 @@ import YouTube from 'react-youtube';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { teamsApi, clubsApi, eventsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
-import { HockeyMatch, HockeyGoal, HockeySave } from '../../types/hockey';
+import { HockeyMatch, HockeyGoal, HockeySave, HockeyCard, PenaltyEvent, HockeyShootout } from '../../types/hockey';
 import MatchEventOverlay from './MatchEventOverlay';
 import FloatingReactions, { FloatingReactionsRef } from './FloatingReactions';
 
@@ -15,6 +15,9 @@ const MatchSpectator: React.FC = () => {
   const [match, setMatch] = useState<HockeyMatch | null>(null);
   const [goals, setGoals] = useState<HockeyGoal[]>([]);
   const [saves, setSaves] = useState<HockeySave[]>([]);
+  const [cards, setCards] = useState<HockeyCard[]>([]);
+  const [penalties, setPenalties] = useState<PenaltyEvent[]>([]);
+  const [shootouts, setShootouts] = useState<HockeyShootout[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayTime, setDisplayTime] = useState(0);
   const [visibleEvent, setVisibleEvent] = useState<'goal' | 'save' | 'rival_goal' | null>(null);
@@ -217,13 +220,19 @@ const MatchSpectator: React.FC = () => {
       setTeam1Category(category1);
       setTeam2Category(category2);
 
-      const [goalsData, savesData] = await Promise.all([
+      const [goalsData, savesData, cardsData, penaltiesData, shootoutsData] = await Promise.all([
         hockeyApi.getMatchGoals(matchData.id),
         hockeyApi.getMatchSaves(matchData.id),
+        hockeyApi.getMatchCards(matchData.id),
+        hockeyApi.getMatchPenalties(matchData.id),
+        hockeyApi.getMatchShootouts(matchData.id),
       ]);
       
       setGoals(goalsData);
       setSaves(savesData);
+      setCards(cardsData);
+      setPenalties(penaltiesData);
+      setShootouts(shootoutsData);
       isInitialLoad.current = false;
       previousGoalsLength.current = goalsData.length;
       previousSavesLength.current = savesData.length;
@@ -507,6 +516,108 @@ const MatchSpectator: React.FC = () => {
           <p className="text-gray-400 text-xs md:text-sm">Sin paradas registradas</p>
         )}
       </div>
+
+      {/* Tarjetas */}
+      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-white/20 mt-2">
+        <h3 className="text-white font-bold mb-2 text-sm md:text-base">🟨 Tarjetas ({cards.length})</h3>
+        {cards.length > 0 ? (
+          <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
+            {cards.map(card => (
+              <div key={card.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-lg">
+                    {card.card_type === 'green' ? '🟢' : card.card_type === 'yellow' ? '🟡' : '🔴'}
+                  </span>
+                  <span className="text-white text-xs md:text-sm">
+                    {card.player_name || 'Anónimo'} {card.dorsal && `#${card.dorsal}`}
+                  </span>
+                  <span
+                    className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                    style={{ 
+                      backgroundColor: card.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                      color: card.team === 'team1' ? match.team1_color : match.team2_color
+                    }}
+                  >
+                    {card.team === 'team1' ? match.team1_name : match.team2_name}
+                  </span>
+                  <span className="text-gray-400 text-xs">
+                    Q{card.quarter} - {card.match_minute}'
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-400 text-xs md:text-sm">Sin tarjetas registradas</p>
+        )}
+      </div>
+
+      {/* Penaltis/Penaltys */}
+      <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-white/20 mt-2">
+        <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penaltis / Penaltys ({penalties.length})</h3>
+        {penalties.length > 0 ? (
+          <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
+            {penalties.map(penalty => (
+              <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-lg">
+                    {penalty.event_type === 'penalty_goal' || penalty.event_type === 'stroke_goal' ? '✅' : '❌'}
+                  </span>
+                  <span
+                    className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                    style={{ 
+                      backgroundColor: penalty.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                      color: penalty.team === 'team1' ? match.team1_color : match.team2_color
+                    }}
+                  >
+                    {penalty.team === 'team1' ? match.team1_name : match.team2_name}
+                  </span>
+                  <span className="text-gray-300 text-xs">
+                    {penalty.event_type.includes('penalty') ? 'Penalty' : 'Penalty Corner'}
+                  </span>
+                  <span className="text-gray-400 text-xs">
+                    Q{penalty.quarter} - {penalty.match_minute}'
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-400 text-xs md:text-sm">Sin penaltis/penaltys registrados</p>
+        )}
+      </div>
+
+      {/* Shootouts */}
+      {shootouts.length > 0 && (
+        <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-white/20 mt-2">
+          <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Shootouts</h3>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <div className="text-center bg-white/10 rounded p-2">
+              <div className="text-xs text-gray-400">{match.team1_name}</div>
+              <div className="text-2xl font-bold text-green-400">
+                {shootouts.filter(s => s.team === 'team1' && s.scored).length}
+              </div>
+            </div>
+            <div className="text-center bg-white/10 rounded p-2">
+              <div className="text-xs text-gray-400">{match.team2_name}</div>
+              <div className="text-2xl font-bold text-green-400">
+                {shootouts.filter(s => s.team === 'team2' && s.scored).length}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {shootouts.map((s) => (
+              <div key={s.id} className="flex justify-between items-center py-1 px-2 text-sm bg-white/5 rounded">
+                <span className={s.team === 'team1' ? 'text-blue-400' : 'text-red-400'} style={{ minWidth: '80px' }}>
+                  {s.team === 'team1' ? match.team1_name : match.team2_name}
+                </span>
+                <span className="text-white text-xs">{s.player_name} {s.dorsal && `#${s.dorsal}`}</span>
+                <span>{s.scored ? '✅' : '❌'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Overlay de eventos animados */}
       <MatchEventOverlay

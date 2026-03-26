@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { convocationApi, clubsApi, eventsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
-import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave, HockeyCard, MatchLineup, CardType } from '../../types/hockey';
+import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave, HockeyCard, MatchLineup, CardType, PenaltyEvent, HockeyShootout } from '../../types/hockey';
+import { generateMatchPDF } from '../../lib/pdfExport';
 
 const MatchAdmin: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -52,10 +53,19 @@ const MatchAdmin: React.FC = () => {
   const [penaltyType, setPenaltyType] = useState<'penalty' | 'stroke'>('penalty');
   const [penaltyTeam, setPenaltyTeam] = useState<'team1' | 'team2'>('team1');
   const [penaltyResult, setPenaltyResult] = useState<'goal' | 'miss' | null>(null);
+  const [penalties, setPenalties] = useState<PenaltyEvent[]>([]);
   
   // Lineup
   const [lineup, setLineup] = useState<MatchLineup[]>([]);
   const [showLineupModal, setShowLineupModal] = useState(false);
+
+  // Tie / Shootouts
+  const [showTieModal, setShowTieModal] = useState(false);
+  const [showShootoutModal, setShowShootoutModal] = useState(false);
+  const [shootouts, setShootouts] = useState<HockeyShootout[]>([]);
+  const [shootoutTeam, setShootoutTeam] = useState<'team1' | 'team2'>('team1');
+  const [shootoutScored, setShootoutScored] = useState<boolean>(true);
+  const [selectedShootoutPlayer, setSelectedShootoutPlayer] = useState<string>('');
 
   useEffect(() => {
     if (id) loadMatch();
@@ -82,17 +92,25 @@ const MatchAdmin: React.FC = () => {
     const handleQuarterEnd = async () => {
       try {
         if (match.quarter >= 4) {
-          // Último cuarto finalizado, cambiar estado a finished
-          await hockeyApi.updateMatch(match.id, {
-            running: false,
-            status: 'finished',
-          });
-          await clearReactions(match.id);
-          setMatch(prev => prev ? { 
-            ...prev, 
-            running: false,
-            status: 'finished'
-          } : null);
+          // Último cuarto finalizado
+          const finalMatch = await hockeyApi.getMatch(match.id);
+          
+          if (finalMatch && finalMatch.score_team1 === finalMatch.score_team2) {
+            // EMPATE - Mostrar modal de shootouts
+            setShowTieModal(true);
+          } else {
+            // Sin empate - Finalizar partido
+            await hockeyApi.updateMatch(match.id, {
+              running: false,
+              status: 'finished',
+            });
+            await clearReactions(match.id);
+            setMatch(prev => prev ? { 
+              ...prev, 
+              running: false,
+              status: 'finished'
+            } : null);
+          }
         } else {
           // Avanzar al siguiente cuarto
           const nextQuarter = match.quarter + 1;
@@ -247,12 +265,14 @@ const MatchAdmin: React.FC = () => {
       setTeam1Logo(logo1);
       setTeam2Logo(logo2);
 
-      const [playersData, goalsData, savesData, cardsData, lineupData] = await Promise.all([
+      const [playersData, goalsData, savesData, cardsData, lineupData, penaltiesData, shootoutsData] = await Promise.all([
         hockeyApi.getMatchPlayers(id!),
         hockeyApi.getMatchGoals(id!),
         hockeyApi.getMatchSaves(id!),
         hockeyApi.getMatchCards(id!),
         hockeyApi.getLineup(id!),
+        hockeyApi.getMatchPenalties(id!),
+        hockeyApi.getMatchShootouts(id!),
       ]);
       
       setPlayers(playersData);
@@ -260,6 +280,8 @@ const MatchAdmin: React.FC = () => {
       setSaves(savesData);
       setCards(cardsData);
       setLineup(lineupData);
+      setPenalties(penaltiesData);
+      setShootouts(shootoutsData);
 
       if (!matchData.admin_pin_hash) {
         setIsAdmin(true);
@@ -701,7 +723,27 @@ const MatchAdmin: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">🏑 Partido de Hockey - Admin</h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={async () => {
+                try {
+                  await generateMatchPDF({
+                    match,
+                    goals,
+                    saves,
+                    cards,
+                    penalties,
+                    shootouts,
+                  });
+                } catch (error) {
+                  console.error('Error generating PDF:', error);
+                  alert('Error al generar el PDF');
+                }
+              }}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700"
+            >
+              📄 Exportar PDF
+            </button>
             <button
               onClick={() => navigate('/match')}
               className="bg-red-600 text-white px-4 py-2 rounded-lg"
@@ -958,6 +1000,128 @@ const MatchAdmin: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Historial de Tarjetas */}
+        <div className="bg-white/10 rounded-xl p-3 md:p-4 border border-white/10 mb-4">
+          <h3 className="text-white font-bold mb-2 text-sm md:text-base">🟨 Tarjetas ({cards.length})</h3>
+          <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
+            {cards.length === 0 ? (
+              <p className="text-gray-400 text-xs md:text-sm">Sin tarjetas registradas</p>
+            ) : (
+              cards.map(card => (
+                <div key={card.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-lg">
+                      {card.card_type === 'green' ? '🟢' : card.card_type === 'yellow' ? '🟡' : '🔴'}
+                    </span>
+                    <span className="text-white text-xs md:text-sm">
+                      {card.player_name || 'Anónimo'} {card.dorsal && `#${card.dorsal}`}
+                    </span>
+                    <span
+                      className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                      style={{ 
+                        backgroundColor: card.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                        color: card.team === 'team1' ? match.team1_color : match.team2_color
+                      }}
+                    >
+                      {card.team === 'team1' ? match.team1_name : match.team2_name}
+                    </span>
+                    <span className="text-gray-400 text-xs">
+                      Q{card.quarter} - {card.match_minute}'
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await hockeyApi.removeCard(card.id);
+                      const updatedCards = await hockeyApi.getMatchCards(match.id);
+                      setCards(updatedCards);
+                    }}
+                    className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Historial de Penaltis/Penaltys */}
+        <div className="bg-white/10 rounded-xl p-3 md:p-4 border border-white/10 mb-4">
+          <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penaltis / Penaltys ({penalties.length})</h3>
+          <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
+            {penalties.length === 0 ? (
+              <p className="text-gray-400 text-xs md:text-sm">Sin penaltis/penaltys registrados</p>
+            ) : (
+              penalties.map(penalty => (
+                <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-lg">
+                      {penalty.event_type === 'penalty_goal' || penalty.event_type === 'stroke_goal' ? '✅' : '❌'}
+                    </span>
+                    <span
+                      className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                      style={{ 
+                        backgroundColor: penalty.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                        color: penalty.team === 'team1' ? match.team1_color : match.team2_color
+                      }}
+                    >
+                      {penalty.team === 'team1' ? match.team1_name : match.team2_name}
+                    </span>
+                    <span className="text-gray-300 text-xs">
+                      {penalty.event_type.includes('penalty') ? 'Penalty' : 'Penalty Corner'}
+                    </span>
+                    <span className="text-gray-400 text-xs">
+                      Q{penalty.quarter} - {penalty.match_minute}'
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await hockeyApi.removePenalty(penalty.id);
+                      const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
+                      setPenalties(updatedPenalties);
+                    }}
+                    className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Historial de Shootouts */}
+        {shootouts.length > 0 && (
+          <div className="bg-white/10 rounded-xl p-3 md:p-4 border border-white/10 mb-4">
+            <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Shootouts</h3>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div className="text-center bg-white/5 rounded p-2">
+                <div className="text-xs text-gray-400">{match.team1_name}</div>
+                <div className="text-2xl font-bold text-green-400">
+                  {shootouts.filter(s => s.team === 'team1' && s.scored).length}
+                </div>
+              </div>
+              <div className="text-center bg-white/5 rounded p-2">
+                <div className="text-xs text-gray-400">{match.team2_name}</div>
+                <div className="text-2xl font-bold text-green-400">
+                  {shootouts.filter(s => s.team === 'team2' && s.scored).length}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1 max-h-24 overflow-y-auto">
+              {shootouts.map((s, idx) => (
+                <div key={s.id} className="flex justify-between items-center py-1 px-2 text-sm bg-white/5 rounded">
+                  <span className={s.team === 'team1' ? 'text-blue-400' : 'text-red-400'} style={{ minWidth: '80px' }}>
+                    {s.team === 'team1' ? match.team1_name : match.team2_name}
+                  </span>
+                  <span className="text-white text-xs">{s.player_name} {s.dorsal && `#${s.dorsal}`}</span>
+                  <span>{s.scored ? '✅' : '❌'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Modal de gol */}
         {showGoalModal && (
@@ -1329,28 +1493,217 @@ const MatchAdmin: React.FC = () => {
                     if (!match || !isAdmin || !penaltyResult) return;
 
                     if (penaltyResult === 'goal') {
-                      setGoalTeam(penaltyType === 'penalty' ? penaltyTeam : penaltyTeam);
+                      // Para goles, abrir el modal de gol con flag de penalty
+                      setGoalTeam(penaltyTeam);
                       setShowGoalModal(true);
                       setShowPenaltyModal(false);
                     } else {
+                      // Guardar penalty/stroke fallado
                       const qDuration = match.quarter_duration;
                       const elapsedInQuarter = qDuration - displayTime;
                       const secondsBefore = (match.quarter - 1) * qDuration;
                       const matchMinute = Math.floor((secondsBefore + elapsedInQuarter) / 60);
 
-                      await supabase.from('match_events').insert({
-                        match_id: match.id,
+                      await hockeyApi.addPenalty(match.id, {
                         event_type: penaltyType === 'penalty' ? 'penalty_miss' : 'stroke_miss',
-                        team_id: penaltyTeam,
-                        minute: matchMinute,
+                        team: penaltyTeam,
+                        quarter: match.quarter,
+                        match_minute: matchMinute,
                       });
 
+                      const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
+                      setPenalties(updatedPenalties);
                       setShowPenaltyModal(false);
                     }
                   }}
                   className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold"
                 >
                   Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Empate - Shootouts */}
+        {showTieModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#071025] rounded-2xl p-6 max-w-md w-full border border-white/10 text-center">
+              <h2 className="text-2xl font-bold text-white mb-2">¡EMPATE!</h2>
+              <p className="text-gray-400 mb-6">
+                El partido ha terminado en empate ({match?.score_team1} - {match?.score_team2})
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={async () => {
+                    if (!match) return;
+                    setShowTieModal(false);
+                    setShowShootoutModal(true);
+                    setShootoutTeam('team1');
+                  }}
+                  className="w-full bg-green-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-green-700"
+                >
+                  🎯 Iniciar Shootouts
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!match) return;
+                    await hockeyApi.updateMatch(match.id, {
+                      running: false,
+                      status: 'finished',
+                    });
+                    await clearReactions(match.id);
+                    setMatch(prev => prev ? { 
+                      ...prev, 
+                      running: false,
+                      status: 'finished'
+                    } : null);
+                    setShowTieModal(false);
+                  }}
+                  className="w-full bg-gray-600 text-white py-3 rounded-lg font-bold hover:bg-gray-700"
+                >
+                  Finalizar Partido (Empate)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Shootouts */}
+        {showShootoutModal && match && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#071025] rounded-2xl p-6 max-w-lg w-full border border-white/10">
+              <h2 className="text-2xl font-bold text-white mb-4 text-center">🎯 Shootouts</h2>
+              
+              {/* Marcador de shootouts */}
+              <div className="bg-white/5 rounded-xl p-4 mb-4">
+                <div className="flex justify-between items-center">
+                  <div className="text-center flex-1">
+                    <div className="text-sm text-gray-400">{match.team1_name}</div>
+                    <div className="text-3xl font-bold text-white">
+                      {shootouts.filter(s => s.team === 'team1' && s.scored).length}
+                    </div>
+                  </div>
+                  <div className="text-xl text-gray-500">VS</div>
+                  <div className="text-center flex-1">
+                    <div className="text-sm text-gray-400">{match.team2_name}</div>
+                    <div className="text-3xl font-bold text-white">
+                      {shootouts.filter(s => s.team === 'team2' && s.scored).length}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-center text-xs text-gray-500 mt-2">
+                  Ronda {Math.floor(shootouts.length / 2) + 1}
+                </div>
+              </div>
+
+              {/* Historial de shootout actual */}
+              <div className="mb-4 max-h-32 overflow-y-auto">
+                {shootouts.map((s, idx) => (
+                  <div key={s.id} className="flex justify-between items-center py-1 px-2 text-sm">
+                    <span className={s.team === 'team1' ? 'text-blue-400' : 'text-red-400'}>
+                      {s.team === 'team1' ? match.team1_name : match.team2_name}
+                    </span>
+                    <span>
+                      {s.player_name} {s.dorsal && `#${s.dorsal}`}
+                    </span>
+                    <span>{s.scored ? '✅' : '❌'}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Turno actual */}
+              <div className="mb-4">
+                <div className="text-center mb-2">
+                  <span className="text-gray-400">Turno: </span>
+                  <span className={`font-bold ${shootoutTeam === 'team1' ? 'text-blue-400' : 'text-red-400'}`}>
+                    {shootoutTeam === 'team1' ? match.team1_name : match.team2_name}
+                  </span>
+                </div>
+
+                <div className="mb-3">
+                  <label className="text-gray-400 text-sm block mb-2">Jugadora</label>
+                  <select
+                    value={selectedShootoutPlayer}
+                    onChange={(e) => setSelectedShootoutPlayer(e.target.value)}
+                    className="w-full p-3 rounded-lg bg-white text-black border border-gray-300"
+                  >
+                    <option value="">Seleccionar jugadora...</option>
+                    {convocationPlayers.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.dorsal && `#${p.dorsal}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="mb-3">
+                  <label className="text-gray-400 text-sm block mb-2">Resultado</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShootoutScored(false)}
+                      className={`flex-1 py-3 rounded-lg font-bold ${!shootoutScored ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                    >
+                      ❌ Fallado
+                    </button>
+                    <button
+                      onClick={() => setShootoutScored(true)}
+                      className={`flex-1 py-3 rounded-lg font-bold ${shootoutScored ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                    >
+                      ✅ Gol
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => {
+                    if (!match || !selectedShootoutPlayer) return;
+                    
+                    const player = convocationPlayers.find(p => p.id === selectedShootoutPlayer);
+                    const roundNumber = Math.floor(shootouts.length / 2) + 1;
+                    
+                    await hockeyApi.addShootout(match.id, {
+                      team: shootoutTeam,
+                      player_id: selectedShootoutPlayer,
+                      player_name: player?.name || 'Anónimo',
+                      dorsal: player?.dorsal,
+                      scored: shootoutScored,
+                      round_number: roundNumber,
+                    });
+                    
+                    const updatedShootouts = await hockeyApi.getMatchShootouts(match.id);
+                    setShootouts(updatedShootouts);
+                    setSelectedShootoutPlayer('');
+                    
+                    // Cambiar equipo
+                    setShootoutTeam(shootoutTeam === 'team1' ? 'team2' : 'team1');
+                    setShootoutScored(true);
+                  }}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold"
+                >
+                  Registrar
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!match) return;
+                    // Finalizar shootouts
+                    await hockeyApi.updateMatch(match.id, {
+                      running: false,
+                      status: 'finished',
+                    });
+                    await clearReactions(match.id);
+                    setMatch(prev => prev ? { 
+                      ...prev, 
+                      running: false,
+                      status: 'finished'
+                    } : null);
+                    setShowShootoutModal(false);
+                  }}
+                  className="bg-gray-600 text-white py-3 px-4 rounded-lg font-bold"
+                >
+                  Finalizar
                 </button>
               </div>
             </div>
