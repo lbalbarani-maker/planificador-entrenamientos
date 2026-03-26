@@ -718,6 +718,9 @@ const MatchAdmin: React.FC = () => {
             <div className="text-sm text-gray-400 mb-2">CUARTO</div>
             <div className="text-4xl font-bold text-white mb-2">{match.quarter}/4</div>
             <div className="text-5xl md:text-6xl font-mono font-bold text-yellow-400">{formatTime(displayTime)}</div>
+            {match.status === 'finished' ? (
+              <div className="mt-4 text-red-500 font-bold text-lg">PARTIDO FINALIZADO</div>
+            ) : (
             <div className="mt-4 flex gap-2 justify-center flex-wrap">
               {!match.running ? (
                 <button
@@ -741,27 +744,28 @@ const MatchAdmin: React.FC = () => {
                 🔄
               </button>
               <button
-                onClick={() => { setPenaltyType('penalty'); setPenaltyTeam('team1'); setPenaltyResult(null); setShowPenaltyModal(true); }}
+                onClick={() => { loadConvocationPlayers(); setPenaltyType('penalty'); setPenaltyTeam('team1'); setPenaltyResult(null); setShowPenaltyModal(true); }}
                 className="bg-yellow-500 text-white px-3 py-2 rounded-lg text-sm md:text-base"
                 title="Penalty"
               >
                 🟡
               </button>
               <button
-                onClick={() => { setPenaltyType('stroke'); setPenaltyTeam('team1'); setPenaltyResult(null); setShowPenaltyModal(true); }}
+                onClick={() => { loadConvocationPlayers(); setPenaltyType('stroke'); setPenaltyTeam('team1'); setPenaltyResult(null); setShowPenaltyModal(true); }}
                 className="bg-red-500 text-white px-3 py-2 rounded-lg text-sm md:text-base"
                 title="Stroke"
               >
                 🔴
               </button>
               <button
-                onClick={() => { setCardTeam('team1'); setCardType('yellow'); setSelectedCardPlayer(''); setShowCardModal(true); }}
+                onClick={() => { loadConvocationPlayers(); setCardTeam('team1'); setCardType('yellow'); setSelectedCardPlayer(''); setShowCardModal(true); }}
                 className="bg-orange-600 text-white px-3 py-2 rounded-lg text-sm md:text-base"
                 title="Tarjeta"
               >
                 🟥
               </button>
             </div>
+            )}
           </div>
 
           {/* Equipos - Mobile: stacked, Desktop: side by side */}
@@ -1215,11 +1219,11 @@ const MatchAdmin: React.FC = () => {
                 <select
                   value={selectedCardPlayer}
                   onChange={(e) => setSelectedCardPlayer(e.target.value)}
-                  className="w-full p-3 rounded-lg bg-white/10 text-white border border-white/20"
+                  className="w-full p-3 rounded-lg bg-white text-black border border-gray-300"
                 >
                   <option value="">Seleccionar jugadora...</option>
                   {convocationPlayers.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.dorsal})</option>
+                    <option key={p.id} value={p.id} className="text-black">{p.name} ({p.dorsal})</option>
                   ))}
                 </select>
               </div>
@@ -1234,25 +1238,31 @@ const MatchAdmin: React.FC = () => {
                 <button
                   onClick={async () => {
                     if (!match || !isAdmin) return;
-                    const qDuration = match.quarter_duration;
-                    const elapsedInQuarter = qDuration - displayTime;
-                    const secondsBefore = (match.quarter - 1) * qDuration;
-                    const matchMinute = Math.floor((secondsBefore + elapsedInQuarter) / 60);
+                    try {
+                      const qDuration = match.quarter_duration;
+                      const elapsedInQuarter = qDuration - displayTime;
+                      const secondsBefore = (match.quarter - 1) * qDuration;
+                      const matchMinute = Math.floor((secondsBefore + elapsedInQuarter) / 60);
 
-                    const player = convocationPlayers.find(p => p.id === selectedCardPlayer);
-                    await hockeyApi.addCard(match.id, {
-                      team: cardTeam,
-                      card_type: cardType,
-                      player_id: selectedCardPlayer || undefined,
-                      player_name: player?.name || 'Anónimo',
-                      dorsal: player?.dorsal,
-                      quarter: match.quarter,
-                      match_minute: matchMinute,
-                    });
+                      const player = convocationPlayers.find(p => p.id === selectedCardPlayer);
+                      await hockeyApi.addCard(match.id, {
+                        team: cardTeam,
+                        card_type: cardType,
+                        player_id: selectedCardPlayer || undefined,
+                        player_name: player?.name || 'Anónimo',
+                        dorsal: player?.dorsal,
+                        quarter: match.quarter,
+                        match_minute: matchMinute,
+                      });
 
-                    const updatedCards = await hockeyApi.getMatchCards(match.id);
-                    setCards(updatedCards);
-                    setShowCardModal(false);
+                      const updatedCards = await hockeyApi.getMatchCards(match.id);
+                      setCards(updatedCards);
+                      setShowCardModal(false);
+                      setSelectedCardPlayer('');
+                    } catch (error) {
+                      console.error('Error adding card:', error);
+                      alert('Error al registrar tarjeta: ' + error);
+                    }
                   }}
                   className="flex-1 bg-orange-600 text-white py-3 rounded-lg font-bold"
                 >
