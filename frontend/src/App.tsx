@@ -22,6 +22,9 @@ import LotterySales from './components/Lotteries/LotterySales';
 import LotteryPublic from './components/Lotteries/LotteryPublic';
 import TournamentsList from './components/Tournaments/TournamentsList';
 import TournamentDetail from './components/Tournaments/TournamentDetail';
+import ShopMain from './components/Shop/ShopMain';
+import MarketplaceForm from './components/Shop/Marketplace/MarketplaceForm';
+import MarketplaceDetail from './components/Shop/Marketplace/MarketplaceDetail';
 import { NotificationSettingsPage } from './pages/NotificationSettings';
 import { AdminPushPage } from './pages/AdminPush';
 import { OfflineBanner } from './components/notifications/OfflineBanner';
@@ -121,6 +124,11 @@ function App() {
         {/* Rutas de Torneos */}
         <Route path="/tournaments" element={user ? <TournamentsList /> : <Navigate to="/login" replace />} />
         <Route path="/tournaments/:id" element={user ? <TournamentDetail /> : <Navigate to="/login" replace />} />
+        
+        {/* Rutas de Tienda */}
+        <Route path="/shop" element={user ? <ShopMain /> : <Navigate to="/login" replace />} />
+        <Route path="/shop/marketplace/new" element={user ? <MarketplaceForm /> : <Navigate to="/login" replace />} />
+        <Route path="/shop/marketplace/:id" element={user ? <MarketplaceDetail /> : <Navigate to="/login" replace />} />
         
         {/* Rutas de Notificaciones */}
         <Route path="/settings/notifications" element={user ? <NotificationSettingsPage /> : <Navigate to="/login" replace />} />

@@ -46,6 +46,7 @@ const Dashboard: React.FC = () => {
     if (path.startsWith('/players')) return 'players';
     if (path.startsWith('/trainings')) return 'trainings';
     if (path.startsWith('/clubs')) return 'clubs';
+    if (path.startsWith('/shop')) return 'shop';
     if (path.startsWith('/users')) return 'users';
     return 'home';
   };
@@ -151,6 +152,7 @@ const Dashboard: React.FC = () => {
     { id: 'teams', label: 'Equipos', icon: '🏅', path: '/teams', roles: ['admin', 'admin_club', 'entrenador', 'coordinador', 'delegado'] },
     { id: 'players', label: 'Jugadores/as', icon: '👤', path: '/players', roles: ['admin', 'admin_club', 'entrenador', 'coordinador'] },
     { id: 'lotteries', label: 'Loterías', icon: '🎫', path: '/lotteries', roles: ['admin', 'admin_club', 'coordinador', 'tesorero'] },
+    { id: 'shop', label: 'Tienda', icon: '🛒', path: '/shop' },
     { id: 'trainings', label: 'Entrenos Físicos', icon: '🏋️', path: '/trainings', roles: ['admin', 'admin_club', 'entrenador', 'preparador'] },
     { id: 'locations', label: 'Pistas', icon: '📍', path: '/locations', roles: ['admin', 'admin_club', 'coordinador'] },
     ...(hasRole(user.role, 'admin') ? [{ id: 'clubs', label: 'Clubes', icon: '🏢', path: '/clubs' }] : []),
