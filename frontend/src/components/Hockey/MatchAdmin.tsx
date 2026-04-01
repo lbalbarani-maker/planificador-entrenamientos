@@ -1101,49 +1101,90 @@ const MatchAdmin: React.FC = () => {
           </div>
         </div>
 
-        {/* Historial de Penaltis/Penaltys */}
+        {/* Historial de Penalty corner / Stroke */}
         <div className="bg-white/10 rounded-xl p-3 md:p-4 border border-white/10 mb-4">
-          <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penalty corner / Stroke ({penalties.length})</h3>
-          <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
-            {penalties.length === 0 ? (
-              <p className="text-gray-400 text-xs md:text-sm">Sin penalties/strokes registrados</p>
-            ) : (
-              penalties.map(penalty => (
-                <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-lg">
-                      {penalty.event_type === 'penalty_goal' || penalty.event_type === 'stroke_goal' ? '✅' : '❌'}
-                    </span>
-                    <span
-                      className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
-                      style={{ 
-                        backgroundColor: penalty.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
-                        color: penalty.team === 'team1' ? match.team1_color : match.team2_color
-                      }}
-                    >
+          <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penalty corner / Stroke</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white/5 rounded-lg p-3 text-center">
+              <div className="text-sm text-gray-400">Penalty corner</div>
+              <div className="text-xl font-bold text-white">
+                {penalties.filter(p => p.event_type === 'penalty_goal').length}/
+                {penalties.filter(p => p.event_type.includes('penalty')).length}
+              </div>
+              <div className="text-xs text-gray-500">
+                ({penalties.filter(p => p.event_type === 'penalty_goal').length} goles de {penalties.filter(p => p.event_type.includes('penalty')).length} intentos)
+              </div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-3 text-center">
+              <div className="text-sm text-gray-400">Stroke</div>
+              <div className="text-xl font-bold text-white">
+                {penalties.filter(p => p.event_type === 'stroke_goal').length}/
+                {penalties.filter(p => p.event_type.includes('stroke')).length}
+              </div>
+              <div className="text-xs text-gray-500">
+                ({penalties.filter(p => p.event_type === 'stroke_goal').length} goles de {penalties.filter(p => p.event_type.includes('stroke')).length} intentos)
+              </div>
+            </div>
+          </div>
+          {penalties.filter(p => p.event_type.includes('penalty')).length > 0 && (
+            <div className="mt-3">
+              <div className="text-xs text-gray-400 mb-1">Penalty corners:</div>
+              <div className="space-y-1 max-h-20 overflow-y-auto">
+                {penalties.filter(p => p.event_type.includes('penalty')).map(penalty => (
+                  <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-1.5 rounded text-xs">
+                    <span className={penalty.team === 'team1' ? 'text-blue-400' : 'text-red-400'}>
                       {penalty.team === 'team1' ? match.team1_name : match.team2_name}
                     </span>
-                    <span className="text-gray-300 text-xs">
-                      {penalty.event_type.includes('penalty') ? 'PC' : 'Stroke'}
-                    </span>
-                    <span className="text-gray-400 text-xs">
+                    <span className="text-gray-300">
                       Q{penalty.quarter} - {penalty.match_minute}'
                     </span>
+                    <span>{penalty.event_type === 'penalty_goal' ? '✅ Gol' : '❌ Fallado'}</span>
+                    <button
+                      onClick={async () => {
+                        await hockeyApi.removePenalty(penalty.id);
+                        const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
+                        setPenalties(updatedPenalties);
+                      }}
+                      className="text-red-400 hover:text-red-300"
+                    >
+                      🗑️
+                    </button>
                   </div>
-                  <button
-                    onClick={async () => {
-                      await hockeyApi.removePenalty(penalty.id);
-                      const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
-                      setPenalties(updatedPenalties);
-                    }}
-                    className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {penalties.filter(p => p.event_type.includes('stroke')).length > 0 && (
+            <div className="mt-2">
+              <div className="text-xs text-gray-400 mb-1">Strokes:</div>
+              <div className="space-y-1 max-h-20 overflow-y-auto">
+                {penalties.filter(p => p.event_type.includes('stroke')).map(penalty => (
+                  <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-1.5 rounded text-xs">
+                    <span className={penalty.team === 'team1' ? 'text-blue-400' : 'text-red-400'}>
+                      {penalty.team === 'team1' ? match.team1_name : match.team2_name}
+                    </span>
+                    <span className="text-gray-300">
+                      Q{penalty.quarter} - {penalty.match_minute}'
+                    </span>
+                    <span>{penalty.event_type === 'stroke_goal' ? '✅ Gol' : '❌ Fallado'}</span>
+                    <button
+                      onClick={async () => {
+                        await hockeyApi.removePenalty(penalty.id);
+                        const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
+                        setPenalties(updatedPenalties);
+                      }}
+                      className="text-red-400 hover:text-red-300"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {penalties.length === 0 && (
+            <p className="text-gray-400 text-xs text-center mt-2">Sin penalties/strokes registrados</p>
+          )}
         </div>
 
         {/* Historial de Shootouts */}
@@ -1594,6 +1635,7 @@ const MatchAdmin: React.FC = () => {
                 <button
                   onClick={async () => {
                     if (!match) return;
+                    await loadConvocationPlayers();
                     setShowTieModal(false);
                     setShowShootoutModal(true);
                     setShootoutTeam('team1');
@@ -1671,28 +1713,41 @@ const MatchAdmin: React.FC = () => {
 
               {/* Turno actual */}
               <div className="mb-4">
-                <div className="text-center mb-2">
+                <div className="text-center mb-2 flex items-center justify-center gap-3">
                   <span className="text-gray-400">Turno: </span>
-                  <span className={`font-bold ${shootoutTeam === 'team1' ? 'text-blue-400' : 'text-red-400'}`}>
+                  <span className={`font-bold text-lg ${shootoutTeam === 'team1' ? 'text-blue-400' : 'text-red-400'}`}>
                     {shootoutTeam === 'team1' ? match.team1_name : match.team2_name}
                   </span>
+                  <button
+                    onClick={() => setShootoutTeam(shootoutTeam === 'team1' ? 'team2' : 'team1')}
+                    className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-sm"
+                    title="Cambiar equipo"
+                  >
+                    🔄
+                  </button>
                 </div>
 
-                <div className="mb-3">
-                  <label className="text-gray-400 text-sm block mb-2">Jugadora</label>
-                  <select
-                    value={selectedShootoutPlayer}
-                    onChange={(e) => setSelectedShootoutPlayer(e.target.value)}
-                    className="w-full p-3 rounded-lg bg-white text-black border border-gray-300"
-                  >
-                    <option value="">Seleccionar jugadora...</option>
-                    {convocationPlayers.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} {p.dorsal && `#${p.dorsal}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {shootoutTeam === 'team1' ? (
+                  <div className="mb-3">
+                    <label className="text-gray-400 text-sm block mb-2">Jugadora</label>
+                    <select
+                      value={selectedShootoutPlayer}
+                      onChange={(e) => setSelectedShootoutPlayer(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-white text-black border border-gray-300"
+                    >
+                      <option value="">Seleccionar jugadora...</option>
+                      {convocationPlayers.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} {p.dorsal && `#${p.dorsal}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="mb-3 p-3 bg-white/5 rounded-lg text-center">
+                    <p className="text-gray-400 text-sm">Equipo rival - Solo marca el resultado</p>
+                  </div>
+                )}
 
                 <div className="mb-3">
                   <label className="text-gray-400 text-sm block mb-2">Resultado</label>
@@ -1716,15 +1771,23 @@ const MatchAdmin: React.FC = () => {
               <div className="flex gap-3">
                 <button
                   onClick={async () => {
-                    if (!match || !selectedShootoutPlayer) return;
+                    if (!match) return;
                     
-                    const player = convocationPlayers.find(p => p.id === selectedShootoutPlayer);
+                    // Para team1 (nuestro equipo) requiere jugadora
+                    if (shootoutTeam === 'team1' && !selectedShootoutPlayer) {
+                      alert('Debes seleccionar una jugadora');
+                      return;
+                    }
+                    
+                    const player = shootoutTeam === 'team1' 
+                      ? convocationPlayers.find(p => p.id === selectedShootoutPlayer)
+                      : null;
                     const roundNumber = Math.floor(shootouts.length / 2) + 1;
                     
                     await hockeyApi.addShootout(match.id, {
                       team: shootoutTeam,
-                      player_id: selectedShootoutPlayer,
-                      player_name: player?.name || 'Anónimo',
+                      player_id: shootoutTeam === 'team1' ? selectedShootoutPlayer : undefined,
+                      player_name: player?.name || (shootoutTeam === 'team2' ? 'Rival' : 'Anónimo'),
                       dorsal: player?.dorsal,
                       scored: shootoutScored,
                       round_number: roundNumber,

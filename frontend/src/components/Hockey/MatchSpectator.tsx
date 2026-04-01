@@ -191,6 +191,10 @@ const MatchSpectator: React.FC = () => {
 
   const loadMatch = async () => {
     try {
+      // Guardar longitudes anteriores ANTES de actualizar
+      const prevGoalsLen = previousGoalsLength.current;
+      const prevSavesLen = previousSavesLength.current;
+      
       const matchData = await hockeyApi.getMatchByToken(token!);
       if (!matchData) {
         alert('Partido no encontrado');
@@ -257,9 +261,17 @@ const MatchSpectator: React.FC = () => {
       setCards(cardsData);
       setPenalties(penaltiesData);
       setShootouts(shootoutsData);
-      isInitialLoad.current = false;
-      previousGoalsLength.current = goalsData.length;
-      previousSavesLength.current = savesData.length;
+      
+      // Restaurar previous lengths usando los valores guardados
+      // Solo actualizar si no es la carga inicial
+      if (!isInitialLoad.current) {
+        previousGoalsLength.current = prevGoalsLen;
+        previousSavesLength.current = prevSavesLen;
+      } else {
+        previousGoalsLength.current = goalsData.length;
+        previousSavesLength.current = savesData.length;
+        isInitialLoad.current = false;
+      }
     } catch (error) {
       console.error('Error loading match:', error);
     } finally {
@@ -579,38 +591,59 @@ const MatchSpectator: React.FC = () => {
         )}
       </div>
 
-      {/* Penaltis/Penaltys */}
+      {/* Penalty corner / Stroke */}
       <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-white/20 mt-2">
-        <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penalty corner / Stroke ({penalties.length})</h3>
-        {penalties.length > 0 ? (
-          <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
+        <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penalty corner / Stroke</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white/10 rounded-lg p-3 text-center">
+            <div className="text-sm text-gray-400">Penalty corner</div>
+            <div className="text-xl font-bold text-white">
+              {penalties.filter(p => p.event_type === 'penalty_goal').length}/
+              {penalties.filter(p => p.event_type.includes('penalty')).length}
+            </div>
+            <div className="text-xs text-gray-500">
+              goles / intentos
+            </div>
+          </div>
+          <div className="bg-white/10 rounded-lg p-3 text-center">
+            <div className="text-sm text-gray-400">Stroke</div>
+            <div className="text-xl font-bold text-white">
+              {penalties.filter(p => p.event_type === 'stroke_goal').length}/
+              {penalties.filter(p => p.event_type.includes('stroke')).length}
+            </div>
+            <div className="text-xs text-gray-500">
+              goles / intentos
+            </div>
+          </div>
+        </div>
+        {penalties.length > 0 && (
+          <div className="mt-3 space-y-1 max-h-24 overflow-y-auto">
             {penalties.map(penalty => (
-              <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-2 rounded text-sm">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="text-lg">
-                    {penalty.event_type === 'penalty_goal' || penalty.event_type === 'stroke_goal' ? '✅' : '❌'}
-                  </span>
-                  <span
-                    className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
-                    style={{ 
-                      backgroundColor: penalty.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
-                      color: penalty.team === 'team1' ? match.team1_color : match.team2_color
-                    }}
-                  >
-                    {penalty.team === 'team1' ? match.team1_name : match.team2_name}
-                  </span>
-                  <span className="text-gray-300 text-xs">
-                    {penalty.event_type.includes('penalty') ? 'PC' : 'Stroke'}
-                  </span>
-                  <span className="text-gray-400 text-xs">
-                    Q{penalty.quarter} - {penalty.match_minute}'
-                  </span>
-                </div>
+              <div key={penalty.id} className="flex items-center gap-2 bg-white/5 p-2 rounded text-sm">
+                <span className="text-lg">
+                  {penalty.event_type === 'penalty_goal' || penalty.event_type === 'stroke_goal' ? '✅' : '❌'}
+                </span>
+                <span
+                  className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                  style={{ 
+                    backgroundColor: penalty.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                    color: penalty.team === 'team1' ? match.team1_color : match.team2_color
+                  }}
+                >
+                  {penalty.team === 'team1' ? match.team1_name : match.team2_name}
+                </span>
+                <span className="text-gray-300 text-xs">
+                  {penalty.event_type.includes('penalty') ? 'PC' : 'Stroke'}
+                </span>
+                <span className="text-gray-400 text-xs">
+                  Q{penalty.quarter} - {penalty.match_minute}'
+                </span>
               </div>
             ))}
           </div>
-        ) : (
-          <p className="text-gray-400 text-xs md:text-sm">Sin penalties/strokes registrados</p>
+        )}
+        {penalties.length === 0 && (
+          <p className="text-gray-400 text-xs text-center mt-2">Sin penalties/strokes registrados</p>
         )}
       </div>
 
