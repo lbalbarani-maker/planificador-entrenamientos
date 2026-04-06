@@ -104,7 +104,8 @@ const Login: React.FC = () => {
         id: loggedInUser.id,
         email: loggedInUser.email,
         role: loggedInUser.role,
-        fullName: loggedInUser.full_name
+        fullName: loggedInUser.full_name,
+        club_id: loggedInUser.club_id
       }));
       await linkPlayerToSession(loggedInUser.id, loggedInUser.role);
       await linkParentToSession(loggedInUser.email, loggedInUser.role);
@@ -129,7 +130,8 @@ const Login: React.FC = () => {
           id: user.id,
           email: user.email,
           role: user.role,
-          fullName: user.full_name
+          fullName: user.full_name,
+          club_id: user.club_id
         }));
         await linkPlayerToSession(user.id, user.role);
         await linkParentToSession(user.email, user.role);
@@ -155,7 +157,8 @@ const Login: React.FC = () => {
           id: user.id,
           email: user.email,
           role: user.role,
-          fullName: user.full_name
+          fullName: user.full_name,
+          club_id: user.club_id
         }));
         await linkPlayerToSession(user.id, user.role);
         await linkParentToSession(user.email, user.role);
@@ -168,7 +171,8 @@ const Login: React.FC = () => {
         id: loggedInUser.id,
         email: loggedInUser.email,
         role: loggedInUser.role,
-        fullName: loggedInUser.full_name
+        fullName: loggedInUser.full_name,
+        club_id: loggedInUser.club_id
       }));
       await linkPlayerToSession(loggedInUser.id, loggedInUser.role);
       await linkParentToSession(loggedInUser.email, loggedInUser.role);
@@ -252,7 +256,8 @@ const Login: React.FC = () => {
       id: user.id,
       email: user.email,
       role: user.role,
-      fullName: user.full_name
+      fullName: user.full_name,
+      club_id: user.club_id
     }));
     await linkPlayerToSession(user.id, user.role);
     window.location.href = '/';

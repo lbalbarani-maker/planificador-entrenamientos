@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import BackButton from './BackButton';
 import { usersApi, User } from '../lib/supabaseUsers';
+import { clubsApi } from '../lib/supabaseTeams';
 import { supabase } from '../lib/supabase';
-import { Team, Player } from '../types/teams';
+import { Team, Player, Club } from '../types/teams';
 
 interface SimplePlayer {
   id: string;
@@ -19,6 +20,7 @@ const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [players, setPlayers] = useState<SimplePlayer[]>([]);
   const [teams, setTeams] = useState<SimpleTeam[]>([]);
+  const [clubs, setClubs] = useState<Club[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -29,6 +31,7 @@ const Users: React.FC = () => {
     email: '',
     full_name: '',
     password: '',
+    clubId: '',
     roles: [] as string[],
     playerIds: [] as string[],
     teamIds: [] as string[]
@@ -98,9 +101,20 @@ const Users: React.FC = () => {
     }
   };
 
+  // Cargar clubs
+  const loadClubs = async () => {
+    try {
+      const clubsData = await clubsApi.getClubs();
+      setClubs(clubsData);
+    } catch (error) {
+      console.error('Error loading clubs:', error);
+    }
+  };
+
   useEffect(() => {
     loadUsers();
     loadOptions();
+    loadClubs();
   }, []);
 
 const handleCreateUser = async (e: React.FormEvent) => {
@@ -123,7 +137,7 @@ const handleCreateUser = async (e: React.FormEvent) => {
         
         if (existingUser) {
           userId = existingUser.id;
-          await usersApi.updateUser(userId, { role: roleString, is_active: true });
+          await usersApi.updateUser(userId, { role: roleString, is_active: true, club_id: formData.clubId });
         } else {
           newUser = await usersApi.createUser({
             email: formData.email,
@@ -131,7 +145,7 @@ const handleCreateUser = async (e: React.FormEvent) => {
             password: formData.password || 'default123',
             role: roleString,
             is_active: true,
-            club_id: null,
+            club_id: formData.clubId,
             is_super_admin: false,
             is_club_admin: false
           });
@@ -144,7 +158,7 @@ const handleCreateUser = async (e: React.FormEvent) => {
           password: formData.password || 'default123',
           role: roleString,
           is_active: true,
-          club_id: null,
+          club_id: formData.clubId,
           is_super_admin: false,
           is_club_admin: false
         });
@@ -184,7 +198,7 @@ const handleCreateUser = async (e: React.FormEvent) => {
       const refreshedUsers = await usersApi.getUsers();
       setUsers(refreshedUsers);
       setShowForm(false);
-      setFormData({ email: '', full_name: '', password: '', roles: [], playerIds: [], teamIds: [] });
+      setFormData({ email: '', full_name: '', password: '', clubId: '', roles: [], playerIds: [], teamIds: [] });
       setSuccessMessage(newUser ? 'Usuario creado exitosamente!' : 'Usuario actualizado y vinculado exitosamente!');
       setShowSuccessModal(true);
     } catch (error: any) {
@@ -228,6 +242,7 @@ const handleEditUser = async (user: User) => {
       email: user.email,
       full_name: user.full_name,
       password: '',
+      clubId: user.club_id || '',
       roles: userRoles,
       playerIds,
       teamIds
@@ -247,7 +262,8 @@ const handleUpdateUser = async (e: React.FormEvent) => {
       const updates: any = {
         email: formData.email,
         full_name: formData.full_name,
-        role: roleString
+        role: roleString,
+        club_id: formData.clubId
       };
       
       if (formData.password) {
@@ -300,7 +316,7 @@ const handleUpdateUser = async (e: React.FormEvent) => {
       setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
       setShowForm(false);
       setEditingUser(null);
-      setFormData({ email: '', full_name: '', password: '', roles: [], playerIds: [], teamIds: [] });
+      setFormData({ email: '', full_name: '', password: '', clubId: '', roles: [], playerIds: [], teamIds: [] });
       setSuccessMessage('Usuario actualizado exitosamente!');
       setShowSuccessModal(true);
     } catch (error) {
@@ -346,7 +362,7 @@ const handleUpdateUser = async (e: React.FormEvent) => {
 const resetForm = () => {
     setShowForm(false);
     setEditingUser(null);
-    setFormData({ email: '', full_name: '', password: '', roles: [], playerIds: [], teamIds: [] });
+    setFormData({ email: '', full_name: '', password: '', clubId: '', roles: [], playerIds: [], teamIds: [] });
   };
 
   const toggleRole = (role: string) => {
@@ -429,21 +445,37 @@ return (
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Roles *</label>
-                <div className="grid grid-cols-2 gap-2 border border-gray-300 rounded-md p-3 bg-gray-50">
-                  {AVAILABLE_ROLES.map(role => (
-                    <label key={role.value} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.roles.includes(role.value)}
-                        onChange={() => toggleRole(role.value)}
-                        className="w-4 h-4 text-sanse-blue rounded"
-                        disabled={loading}
-                      />
-                      <span className="text-sm">{role.label}</span>
-                    </label>
+                <label className="block text-sm font-medium text-gray-700">Club *</label>
+                <select
+                  value={formData.clubId}
+                  onChange={(e) => setFormData({ ...formData, clubId: e.target.value })}
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  required
+                  disabled={loading}
+                >
+                  <option value="">Seleccionar club...</option>
+                  {clubs.map(club => (
+                    <option key={club.id} value={club.id}>{club.name}</option>
                   ))}
-                </div>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Roles *</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 border border-gray-300 rounded-md p-3 bg-gray-50">
+                {AVAILABLE_ROLES.map(role => (
+                  <label key={role.value} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.roles.includes(role.value)}
+                      onChange={() => toggleRole(role.value)}
+                      className="w-4 h-4 text-sanse-blue rounded"
+                      disabled={loading}
+                    />
+                    <span className="text-sm">{role.label}</span>
+                  </label>
+                ))}
               </div>
             </div>
 
