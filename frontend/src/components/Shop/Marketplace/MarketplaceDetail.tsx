@@ -10,6 +10,9 @@ const MarketplaceDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [currentImage, setCurrentImage] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'sold' | 'delete' | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -45,21 +48,40 @@ const MarketplaceDetail: React.FC = () => {
     return `https://wa.me/${phone}?text=${message}`;
   };
 
-  const handleMarkAsSold = async () => {
-    if (!item) return;
-    if (confirm('¿Marcar este producto como vendido?')) {
-      await marketplaceApi.markAsSold(item.id);
+  const handleMarkAsSold = () => {
+    setConfirmAction('sold');
+    setShowConfirmModal(true);
+  };
+
+  const handleDelete = () => {
+    setConfirmAction('delete');
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirm = async () => {
+    if (!item || !confirmAction) return;
+    
+    setConfirmLoading(true);
+    try {
+      if (confirmAction === 'sold') {
+        await marketplaceApi.markAsSold(item.id);
+      } else {
+        await marketplaceApi.deleteItem(item.id);
+      }
+      setShowConfirmModal(false);
       navigate('/shop');
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (!item) return;
-    if (confirm('¿Eliminar este producto?')) {
-      await marketplaceApi.deleteItem(item.id);
-      navigate('/shop');
-    }
-  };
+  const getConfirmTitle = () => confirmAction === 'sold' ? 'Marcar como vendido' : 'Eliminar producto';
+  const getConfirmMessage = () => confirmAction === 'sold' 
+    ? '¿Estás seguro de marcar este producto como vendido?' 
+    : '¿Estás seguro de eliminar este producto? Esta acción no se puede deshacer.';
+  const getConfirmButtonColor = () => confirmAction === 'sold' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700';
 
   if (loading) {
     return (
@@ -229,6 +251,35 @@ const MarketplaceDetail: React.FC = () => {
           </a>
         )}
       </div>
+
+      {/* Modal de confirmación */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center">
+            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl">⚠️</span>
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">{getConfirmTitle()}</h3>
+            <p className="text-gray-600 mb-6">{getConfirmMessage()}</p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={handleConfirm}
+                disabled={confirmLoading}
+                className={`${getConfirmButtonColor()} text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50`}
+              >
+                {confirmLoading ? 'Procesando...' : 'Confirmar'}
+              </button>
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="bg-gray-500 text-white px-6 py-2 rounded-lg font-medium"
+                disabled={confirmLoading}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
