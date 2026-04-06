@@ -245,15 +245,41 @@ const MatchAdmin: React.FC = () => {
   }, [id]);
 
   // Polling de respaldo cada 3 segundos (para cuando WebSocket está bloqueado)
+  // Solo carga datos, NO actualiza el cronómetro para evitar efecto de refresh
   useEffect(() => {
     if (!id) return;
     
     const pollInterval = setInterval(() => {
-      loadMatch();
+      loadMatchData();
     }, 3000);
     
     return () => clearInterval(pollInterval);
   }, [id]);
+
+  // Carga solo los datos del partido (sin tocar el cronómetro)
+  const loadMatchData = async () => {
+    try {
+      const [playersData, goalsData, savesData, cardsData, lineupData, penaltyMissesData, shootoutsData] = await Promise.all([
+        hockeyApi.getMatchPlayers(id!),
+        hockeyApi.getMatchGoals(id!),
+        hockeyApi.getMatchSaves(id!),
+        hockeyApi.getMatchCards(id!),
+        hockeyApi.getLineup(id!),
+        hockeyApi.getMatchPenaltyMisses(id!),
+        hockeyApi.getMatchShootouts(id!),
+      ]);
+      
+      setPlayers(playersData);
+      setGoals(goalsData);
+      setSaves(savesData);
+      setCards(cardsData);
+      setLineup(lineupData);
+      setPenaltyMisses(penaltyMissesData);
+      setShootouts(shootoutsData);
+    } catch (error) {
+      console.error('Error loading match data:', error);
+    }
+  };
 
   const loadMatch = async () => {
     try {
