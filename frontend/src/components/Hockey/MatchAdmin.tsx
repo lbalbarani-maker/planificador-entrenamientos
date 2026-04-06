@@ -1087,9 +1087,14 @@ const MatchAdmin: React.FC = () => {
                   </div>
                   <button
                     onClick={async () => {
-                      await hockeyApi.removeCard(card.id);
-                      const updatedCards = await hockeyApi.getMatchCards(match.id);
-                      setCards(updatedCards);
+                      try {
+                        await hockeyApi.removeCard(card.id);
+                        const updatedCards = await hockeyApi.getMatchCards(match.id);
+                        setCards(updatedCards);
+                      } catch (error) {
+                        console.error('Error removing card:', error);
+                        alert('Error al eliminar la tarjeta');
+                      }
                     }}
                     className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
                   >
