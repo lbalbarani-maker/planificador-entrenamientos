@@ -1724,7 +1724,7 @@ const TeamsList: React.FC = () => {
                         <div className="space-y-1">
                           {pending.map(conv => (
                             <div key={conv.id} className="text-sm text-yellow-700">
-                              • {conv.player?.name || 'Jugadora'}
+                              • {conv.player?.full_name || 'Jugadora'}
                             </div>
                           ))}
                           {pending.length === 0 && (
@@ -1741,7 +1741,7 @@ const TeamsList: React.FC = () => {
                         <div className="space-y-1">
                           {accepted.map(conv => (
                             <div key={conv.id} className="text-sm text-green-700">
-                              • {conv.player?.name || 'Jugadora'}
+                              • {conv.player?.full_name || 'Jugadora'}
                             </div>
                           ))}
                           {accepted.length === 0 && (
@@ -1758,7 +1758,7 @@ const TeamsList: React.FC = () => {
                         <div className="space-y-1">
                           {declined.map(conv => (
                             <div key={conv.id} className="text-sm text-red-700">
-                              • {conv.player?.name || 'Jugadora'}
+                              • {conv.player?.full_name || 'Jugadora'}
                             </div>
                           ))}
                           {declined.length === 0 && (
