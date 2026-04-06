@@ -244,6 +244,17 @@ const MatchAdmin: React.FC = () => {
     };
   }, [id]);
 
+  // Polling de respaldo cada 3 segundos (para cuando WebSocket está bloqueado)
+  useEffect(() => {
+    if (!id) return;
+    
+    const pollInterval = setInterval(() => {
+      loadMatch();
+    }, 3000);
+    
+    return () => clearInterval(pollInterval);
+  }, [id]);
+
   const loadMatch = async () => {
     try {
       const matchData = await hockeyApi.getMatch(id!);
