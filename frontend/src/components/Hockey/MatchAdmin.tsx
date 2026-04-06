@@ -1067,17 +1067,28 @@ const MatchAdmin: React.FC = () => {
                     </span>
                   </div>
                   <button
-                    onClick={async () => {
+                    type="button"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Intentando eliminar tarjeta:', card.id);
                       try {
+                        if (!card.id) {
+                          console.error('Error: card.id es undefined');
+                          alert('Error: ID de tarjeta no válido');
+                          return;
+                        }
                         await hockeyApi.removeCard(card.id);
+                        console.log('Tarjeta eliminada exitosamente');
                         const updatedCards = await hockeyApi.getMatchCards(match.id);
                         setCards(updatedCards);
                       } catch (error) {
                         console.error('Error removing card:', error);
-                        alert('Error al eliminar la tarjeta');
+                        alert('Error al eliminar la tarjeta: ' + (error as Error).message);
                       }
                     }}
-                    className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
+                    className="text-red-400 hover:text-red-300 p-2 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer bg-white/10 hover:bg-white/20 rounded transition-colors z-10 relative"
+                    title="Eliminar tarjeta"
                   >
                     🗑️
                   </button>
