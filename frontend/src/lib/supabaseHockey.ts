@@ -542,14 +542,19 @@ export const hockeyApi = {
   },
 
   async removeCard(cardId: string): Promise<void> {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('match_cards')
       .delete()
-      .eq('id', cardId);
+      .eq('id', cardId)
+      .select();
 
     if (error) {
       console.error('Error removing card:', error);
       throw error;
+    }
+    
+    if (!data || data.length === 0) {
+      throw new Error('No se eliminó ninguna tarjeta');
     }
   },
 
