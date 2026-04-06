@@ -158,16 +158,82 @@ const MatchSpectator: React.FC = () => {
     };
   }, [match?.id]);
 
-  // Polling de respaldo cada 3 segundos (para cuando WebSocket está bloqueado)
+  // Polling de datos (goles, tarjetas, etc.) - NO toca el cronómetro
   useEffect(() => {
     if (!match?.id) return;
     
-    const pollInterval = setInterval(() => {
-      loadMatch();
+    const dataInterval = setInterval(() => {
+      loadMatchData();
     }, 3000);
     
-    return () => clearInterval(pollInterval);
+    return () => clearInterval(dataInterval);
   }, [match?.id]);
+  
+  // Polling de estado del partido (solo cambios significativos)
+  useEffect(() => {
+    if (!match?.id) return;
+    
+    const statusInterval = setInterval(() => {
+      checkMatchStatus();
+    }, 3000);
+    
+    return () => clearInterval(statusInterval);
+  }, [match?.id]);
+  
+  // Carga solo los datos del partido (goles, tarjetas, paradas) - SIN tocar el cronómetro
+  const loadMatchData = async () => {
+    if (!match?.id) return;
+    
+    try {
+      // Guardar longitudes anteriores ANTES de actualizar
+      const prevGoalsLen = previousGoalsLength.current;
+      const prevSavesLen = previousSavesLength.current;
+      
+      const [goalsData, savesData, cardsData, penaltyMissesData, shootoutsData] = await Promise.all([
+        hockeyApi.getMatchGoals(match.id),
+        hockeyApi.getMatchSaves(match.id),
+        hockeyApi.getMatchCards(match.id),
+        hockeyApi.getMatchPenaltyMisses(match.id),
+        hockeyApi.getMatchShootouts(match.id),
+      ]);
+      
+      setGoals(goalsData);
+      setSaves(savesData);
+      setCards(cardsData);
+      setPenaltyMisses(penaltyMissesData);
+      setShootouts(shootoutsData);
+      
+      // Restaurar previous lengths
+      previousGoalsLength.current = prevGoalsLen;
+      previousSavesLength.current = prevSavesLen;
+    } catch (error) {
+      console.error('Error loading match data:', error);
+    }
+  };
+  
+  // Verifica cambios significativos en el estado del partido
+  const checkMatchStatus = async () => {
+    if (!token) return;
+    
+    try {
+      const matchData = await hockeyApi.getMatchByToken(token);
+      if (!matchData || !match) return;
+      
+      // Solo actualizar si hay cambios significativos
+      const shouldUpdate = 
+        matchData.running !== match.running ||
+        matchData.quarter !== match.quarter ||
+        matchData.status !== match.status ||
+        Math.abs(matchData.remaining_time - match.remaining_time) > 5; // Diferencia > 5 segundos
+      
+      if (shouldUpdate) {
+        setMatch(matchData);
+        setDisplayTime(matchData.remaining_time);
+      }
+    } catch (error) {
+      console.error('Error checking match status:', error);
+    }
+  };
 
   useEffect(() => {
     if (isInitialLoad.current) return;
