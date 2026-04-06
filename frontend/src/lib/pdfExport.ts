@@ -1,17 +1,17 @@
 import { jsPDF } from 'jspdf';
-import { HockeyMatch, HockeyGoal, HockeySave, HockeyCard, PenaltyEvent, HockeyShootout } from '../types/hockey';
+import { HockeyMatch, HockeyGoal, HockeySave, HockeyCard, HockeyPenaltyMiss, HockeyShootout } from '../types/hockey';
 
 interface PDFData {
   match: HockeyMatch;
   goals: HockeyGoal[];
   saves: HockeySave[];
   cards: HockeyCard[];
-  penalties: PenaltyEvent[];
+  penaltyMisses: HockeyPenaltyMiss[];
   shootouts: HockeyShootout[];
 }
 
 export const generateMatchPDF = async (data: PDFData): Promise<void> => {
-  const { match, goals, saves, cards, penalties, shootouts } = data;
+  const { match, goals, saves, cards, penaltyMisses, shootouts } = data;
   
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -202,29 +202,52 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   
   y += 5;
   
-  // PENALTIS / PENALTYS
+  // PENALTY CORNER / STROKE
+  const penaltyGoals = goals.filter(g => g.is_penalty);
+  const penaltyMissesList = penaltyMisses.filter(pm => pm.type === 'penalty');
+  const strokeMissesList = penaltyMisses.filter(pm => pm.type === 'stroke');
+  const totalPenalties = penaltyGoals.length + penaltyMissesList.length;
+  const totalStrokes = strokeMissesList.length;
+  
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...primaryColor);
-  doc.text(`PENALTIS / PENALTYS (${penalties.length})`, margin, y);
+  doc.text(`PENALTY CORNER / STROKE`, margin, y);
   y += 8;
   
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...textColor);
   
-  if (penalties.length === 0) {
-    doc.setTextColor(...grayColor);
-    doc.text('Sin penaltis/penaltys registrados', margin, y);
+  // Penalty corners
+  doc.text(`Penalty corners: ${penaltyGoals.length}/${totalPenalties} goles`, margin, y);
+  y += lineHeight;
+  
+  if (penaltyMissesList.length > 0) {
+    doc.text('Fallados:', margin, y);
     y += lineHeight;
-  } else {
-    penalties.forEach(p => {
-      const typeText = p.event_type.includes('penalty') ? 'Penalty' : 'Penalty Corner';
-      const resultText = p.event_type.includes('goal') ? 'Gol' : 'Fallado';
-      const text = `${typeText} ${resultText} - Q${p.quarter} ${p.match_minute}' (${p.team === 'team1' ? match.team1_name : match.team2_name})`;
+    penaltyMissesList.forEach(pm => {
+      const text = `  Q${pm.quarter} ${pm.match_minute}' - ${pm.team === 'team1' ? match.team1_name : match.team2_name}`;
       doc.text(text, margin, y);
       y += lineHeight;
     });
+  }
+  
+  // Strokes
+  if (strokeMissesList.length > 0) {
+    doc.text(`Strokes fallados: ${strokeMissesList.length}`, margin, y);
+    y += lineHeight;
+    strokeMissesList.forEach(pm => {
+      const text = `  Q${pm.quarter} ${pm.match_minute}' - ${pm.team === 'team1' ? match.team1_name : match.team2_name}`;
+      doc.text(text, margin, y);
+      y += lineHeight;
+    });
+  }
+  
+  if (totalPenalties === 0 && totalStrokes === 0) {
+    doc.setTextColor(...grayColor);
+    doc.text('Sin penalties/strokes registrados', margin, y);
+    y += lineHeight;
   }
   
   // SHOOTOUTS - Nueva página si es necesario

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { convocationApi, clubsApi, eventsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
-import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave, HockeyCard, MatchLineup, CardType, PenaltyEvent, HockeyShootout } from '../../types/hockey';
+import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave, HockeyCard, MatchLineup, CardType, HockeyPenaltyMiss, HockeyShootout } from '../../types/hockey';
 import { generateMatchPDF } from '../../lib/pdfExport';
 
 const MatchAdmin: React.FC = () => {
@@ -53,7 +53,7 @@ const MatchAdmin: React.FC = () => {
   const [penaltyType, setPenaltyType] = useState<'penalty' | 'stroke'>('penalty');
   const [penaltyTeam, setPenaltyTeam] = useState<'team1' | 'team2'>('team1');
   const [penaltyResult, setPenaltyResult] = useState<'goal' | 'miss' | null>(null);
-  const [penalties, setPenalties] = useState<PenaltyEvent[]>([]);
+  const [penaltyMisses, setPenaltyMisses] = useState<HockeyPenaltyMiss[]>([]);
   const [pendingPenaltyGoal, setPendingPenaltyGoal] = useState<{type: 'penalty' | 'stroke', team: 'team1' | 'team2'} | null>(null);
   
   // Lineup
@@ -230,11 +230,11 @@ const MatchAdmin: React.FC = () => {
         {
           event: '*',
           schema: 'public',
-          table: 'match_events',
+          table: 'hockey_penalty_misses',
           filter: `match_id=eq.${id}`,
         },
         () => {
-          hockeyApi.getMatchPenalties(id!).then(setPenalties);
+          hockeyApi.getMatchPenaltyMisses(id!).then(setPenaltyMisses);
         }
       )
       .subscribe();
@@ -290,13 +290,13 @@ const MatchAdmin: React.FC = () => {
       setTeam1Logo(logo1);
       setTeam2Logo(logo2);
 
-      const [playersData, goalsData, savesData, cardsData, lineupData, penaltiesData, shootoutsData] = await Promise.all([
+      const [playersData, goalsData, savesData, cardsData, lineupData, penaltyMissesData, shootoutsData] = await Promise.all([
         hockeyApi.getMatchPlayers(id!),
         hockeyApi.getMatchGoals(id!),
         hockeyApi.getMatchSaves(id!),
         hockeyApi.getMatchCards(id!),
         hockeyApi.getLineup(id!),
-        hockeyApi.getMatchPenalties(id!),
+        hockeyApi.getMatchPenaltyMisses(id!),
         hockeyApi.getMatchShootouts(id!),
       ]);
       
@@ -305,7 +305,7 @@ const MatchAdmin: React.FC = () => {
       setSaves(savesData);
       setCards(cardsData);
       setLineup(lineupData);
-      setPenalties(penaltiesData);
+      setPenaltyMisses(penaltyMissesData);
       setShootouts(shootoutsData);
 
       if (!matchData.admin_pin_hash) {
@@ -537,31 +537,12 @@ const MatchAdmin: React.FC = () => {
       is_penalty: isPenaltyGoal,
     });
 
-    // Si es gol de penalty/stroke, guardar también en match_events
-    if (pendingPenaltyGoal) {
-      try {
-        await hockeyApi.addPenalty(match.id, {
-          event_type: pendingPenaltyGoal.type === 'penalty' ? 'penalty_goal' : 'stroke_goal',
-          team: pendingPenaltyGoal.team,
-          player_id: selectedPlayerId,
-          player_name: finalPlayerName,
-          dorsal: finalDorsal,
-          quarter: match.quarter,
-          match_minute: matchMinute,
-        });
-      } catch (error) {
-        console.error('Error saving penalty event:', error);
-      }
-    }
-
-    const [updatedGoals, updatedMatch, updatedPenalties] = await Promise.all([
+    const [updatedGoals, updatedMatch] = await Promise.all([
       hockeyApi.getMatchGoals(id!),
       hockeyApi.getMatch(id!),
-      hockeyApi.getMatchPenalties(id!),
     ]);
     
     setGoals(updatedGoals);
-    setPenalties(updatedPenalties);
     if (updatedMatch) setMatch(updatedMatch);
     
     setShowGoalModal(false);
@@ -784,7 +765,7 @@ const MatchAdmin: React.FC = () => {
                     goals,
                     saves,
                     cards,
-                    penalties,
+                    penaltyMisses,
                     shootouts,
                   });
                 } catch (error) {
@@ -1109,87 +1090,120 @@ const MatchAdmin: React.FC = () => {
         {/* Historial de Penalty corner / Stroke */}
         <div className="bg-white/10 rounded-xl p-3 md:p-4 border border-white/10 mb-4">
           <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penalty corner / Stroke</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white/5 rounded-lg p-3 text-center">
-              <div className="text-sm text-gray-400">Penalty corner</div>
-              <div className="text-xl font-bold text-white">
-                {penalties.filter(p => p.event_type === 'penalty_goal').length}/
-                {penalties.filter(p => p.event_type.includes('penalty')).length}
-              </div>
-              <div className="text-xs text-gray-500">
-                ({penalties.filter(p => p.event_type === 'penalty_goal').length} goles de {penalties.filter(p => p.event_type.includes('penalty')).length} intentos)
-              </div>
-            </div>
-            <div className="bg-white/5 rounded-lg p-3 text-center">
-              <div className="text-sm text-gray-400">Stroke</div>
-              <div className="text-xl font-bold text-white">
-                {penalties.filter(p => p.event_type === 'stroke_goal').length}/
-                {penalties.filter(p => p.event_type.includes('stroke')).length}
-              </div>
-              <div className="text-xs text-gray-500">
-                ({penalties.filter(p => p.event_type === 'stroke_goal').length} goles de {penalties.filter(p => p.event_type.includes('stroke')).length} intentos)
-              </div>
-            </div>
-          </div>
-          {penalties.filter(p => p.event_type.includes('penalty')).length > 0 && (
-            <div className="mt-3">
-              <div className="text-xs text-gray-400 mb-1">Penalty corners:</div>
-              <div className="space-y-1 max-h-20 overflow-y-auto">
-                {penalties.filter(p => p.event_type.includes('penalty')).map(penalty => (
-                  <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-1.5 rounded text-xs">
-                    <span className={penalty.team === 'team1' ? 'text-blue-400' : 'text-red-400'}>
-                      {penalty.team === 'team1' ? match.team1_name : match.team2_name}
-                    </span>
-                    <span className="text-gray-300">
-                      Q{penalty.quarter} - {penalty.match_minute}'
-                    </span>
-                    <span>{penalty.event_type === 'penalty_goal' ? '✅ Gol' : '❌ Fallado'}</span>
-                    <button
-                      onClick={async () => {
-                        await hockeyApi.removePenalty(penalty.id);
-                        const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
-                        setPenalties(updatedPenalties);
-                      }}
-                      className="text-red-400 hover:text-red-300"
-                    >
-                      🗑️
-                    </button>
+          {(() => {
+            // Calcular goles y misses de penalty corner
+            const penaltyGoals = goals.filter(g => g.is_penalty);
+            const penaltyMissList = penaltyMisses.filter(pm => pm.type === 'penalty');
+            const totalPenalties = penaltyGoals.length + penaltyMissList.length;
+            
+            // Calcular goles y misses de stroke
+            const strokeGoals = goals.filter(g => false); // Los strokes no se marcan como is_penalty en goals
+            const strokeMissList = penaltyMisses.filter(pm => pm.type === 'stroke');
+            const totalStrokes = strokeMissList.length; // Por ahora solo mostramos misses de stroke
+            
+            return (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white/5 rounded-lg p-3 text-center">
+                    <div className="text-sm text-gray-400">Penalty corner</div>
+                    <div className="text-xl font-bold text-white">
+                      {penaltyGoals.length}/{totalPenalties}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      ({penaltyGoals.length} goles de {totalPenalties} intentos)
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {penalties.filter(p => p.event_type.includes('stroke')).length > 0 && (
-            <div className="mt-2">
-              <div className="text-xs text-gray-400 mb-1">Strokes:</div>
-              <div className="space-y-1 max-h-20 overflow-y-auto">
-                {penalties.filter(p => p.event_type.includes('stroke')).map(penalty => (
-                  <div key={penalty.id} className="flex items-center justify-between bg-white/5 p-1.5 rounded text-xs">
-                    <span className={penalty.team === 'team1' ? 'text-blue-400' : 'text-red-400'}>
-                      {penalty.team === 'team1' ? match.team1_name : match.team2_name}
-                    </span>
-                    <span className="text-gray-300">
-                      Q{penalty.quarter} - {penalty.match_minute}'
-                    </span>
-                    <span>{penalty.event_type === 'stroke_goal' ? '✅ Gol' : '❌ Fallado'}</span>
-                    <button
-                      onClick={async () => {
-                        await hockeyApi.removePenalty(penalty.id);
-                        const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
-                        setPenalties(updatedPenalties);
-                      }}
-                      className="text-red-400 hover:text-red-300"
-                    >
-                      🗑️
-                    </button>
+                  <div className="bg-white/5 rounded-lg p-3 text-center">
+                    <div className="text-sm text-gray-400">Stroke</div>
+                    <div className="text-xl font-bold text-white">
+                      0/{totalStrokes}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      (0 goles de {totalStrokes} intentos)
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {penalties.length === 0 && (
-            <p className="text-gray-400 text-xs text-center mt-2">Sin penalties/strokes registrados</p>
-          )}
+                </div>
+                
+                {/* Lista de penalty corners */}
+                {totalPenalties > 0 && (
+                  <div className="mt-3">
+                    <div className="text-xs text-gray-400 mb-1">Penalty corners:</div>
+                    <div className="space-y-1 max-h-20 overflow-y-auto">
+                      {/* Goles de penalty */}
+                      {penaltyGoals.map(goal => (
+                        <div key={goal.id} className="flex items-center justify-between bg-white/5 p-1.5 rounded text-xs">
+                          <span className={goal.team === 'team1' ? 'text-blue-400' : 'text-red-400'}>
+                            {goal.team === 'team1' ? match.team1_name : match.team2_name}
+                          </span>
+                          <span className="text-gray-300">
+                            Q{goal.quarter} - {goal.match_minute}'
+                          </span>
+                          <span>✅ Gol</span>
+                          <span className="text-gray-400">{goal.player_name}</span>
+                        </div>
+                      ))}
+                      {/* Misses de penalty */}
+                      {penaltyMissList.map(miss => (
+                        <div key={miss.id} className="flex items-center justify-between bg-white/5 p-1.5 rounded text-xs">
+                          <span className={miss.team === 'team1' ? 'text-blue-400' : 'text-red-400'}>
+                            {miss.team === 'team1' ? match.team1_name : match.team2_name}
+                          </span>
+                          <span className="text-gray-300">
+                            Q{miss.quarter} - {miss.match_minute}'
+                          </span>
+                          <span>❌ Fallado</span>
+                          <button
+                            onClick={async () => {
+                              await hockeyApi.removePenaltyMiss(miss.id);
+                              const updatedPenaltyMisses = await hockeyApi.getMatchPenaltyMisses(match.id);
+                              setPenaltyMisses(updatedPenaltyMisses);
+                            }}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Lista de strokes */}
+                {totalStrokes > 0 && (
+                  <div className="mt-2">
+                    <div className="text-xs text-gray-400 mb-1">Strokes:</div>
+                    <div className="space-y-1 max-h-20 overflow-y-auto">
+                      {strokeMissList.map(miss => (
+                        <div key={miss.id} className="flex items-center justify-between bg-white/5 p-1.5 rounded text-xs">
+                          <span className={miss.team === 'team1' ? 'text-blue-400' : 'text-red-400'}>
+                            {miss.team === 'team1' ? match.team1_name : match.team2_name}
+                          </span>
+                          <span className="text-gray-300">
+                            Q{miss.quarter} - {miss.match_minute}'
+                          </span>
+                          <span>❌ Fallado</span>
+                          <button
+                            onClick={async () => {
+                              await hockeyApi.removePenaltyMiss(miss.id);
+                              const updatedPenaltyMisses = await hockeyApi.getMatchPenaltyMisses(match.id);
+                              setPenaltyMisses(updatedPenaltyMisses);
+                            }}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {totalPenalties === 0 && totalStrokes === 0 && (
+                  <p className="text-gray-400 text-xs text-center mt-2">Sin penalties/strokes registrados</p>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Historial de Shootouts */}
@@ -1602,15 +1616,15 @@ const MatchAdmin: React.FC = () => {
                     } else {
                       // Guardar penalty/stroke fallado
                       try {
-                        await hockeyApi.addPenalty(match.id, {
-                          event_type: penaltyType === 'penalty' ? 'penalty_miss' : 'stroke_miss',
+                        await hockeyApi.addPenaltyMiss(match.id, {
+                          type: penaltyType,
                           team: penaltyTeam,
                           quarter: match.quarter,
                           match_minute: Math.floor(((match.quarter - 1) * match.quarter_duration + (match.quarter_duration - displayTime)) / 60),
                         });
 
-                        const updatedPenalties = await hockeyApi.getMatchPenalties(match.id);
-                        setPenalties(updatedPenalties);
+                        const updatedPenaltyMisses = await hockeyApi.getMatchPenaltyMisses(match.id);
+                        setPenaltyMisses(updatedPenaltyMisses);
                         setShowPenaltyModal(false);
                         setPenaltyResult(null);
                       } catch (error) {

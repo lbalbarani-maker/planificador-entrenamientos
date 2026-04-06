@@ -104,6 +104,19 @@ export interface MatchSubstitution {
   created_at: string;
 }
 
+export interface HockeyPenaltyMiss {
+  id: string;
+  match_id: string;
+  team: 'team1' | 'team2';
+  player_id?: string;
+  player_name?: string;
+  dorsal?: string;
+  quarter: number;
+  match_minute: number;
+  type: 'penalty' | 'stroke';
+  created_at: string;
+}
+
 export interface HockeyMatchWithDetails extends HockeyMatch {
   players?: HockeyPlayer[];
   goals?: HockeyGoal[];

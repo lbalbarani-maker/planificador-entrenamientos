@@ -4,7 +4,7 @@ import YouTube from 'react-youtube';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { teamsApi, clubsApi, eventsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
-import { HockeyMatch, HockeyGoal, HockeySave, HockeyCard, PenaltyEvent, HockeyShootout } from '../../types/hockey';
+import { HockeyMatch, HockeyGoal, HockeySave, HockeyCard, HockeyPenaltyMiss, HockeyShootout } from '../../types/hockey';
 import MatchEventOverlay from './MatchEventOverlay';
 import FloatingReactions, { FloatingReactionsRef } from './FloatingReactions';
 
@@ -16,7 +16,7 @@ const MatchSpectator: React.FC = () => {
   const [goals, setGoals] = useState<HockeyGoal[]>([]);
   const [saves, setSaves] = useState<HockeySave[]>([]);
   const [cards, setCards] = useState<HockeyCard[]>([]);
-  const [penalties, setPenalties] = useState<PenaltyEvent[]>([]);
+  const [penaltyMisses, setPenaltyMisses] = useState<HockeyPenaltyMiss[]>([]);
   const [shootouts, setShootouts] = useState<HockeyShootout[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayTime, setDisplayTime] = useState(0);
@@ -148,7 +148,7 @@ const MatchSpectator: React.FC = () => {
           filter: `match_id=eq.${match.id}`,
         },
         () => {
-          hockeyApi.getMatchPenalties(match.id).then(setPenalties);
+          hockeyApi.getMatchPenaltyMisses(match.id).then(setPenaltyMisses);
         }
       )
       .subscribe();
@@ -259,18 +259,18 @@ const MatchSpectator: React.FC = () => {
       setTeam1Category(category1);
       setTeam2Category(category2);
 
-      const [goalsData, savesData, cardsData, penaltiesData, shootoutsData] = await Promise.all([
+      const [goalsData, savesData, cardsData, penaltyMissesData, shootoutsData] = await Promise.all([
         hockeyApi.getMatchGoals(matchData.id),
         hockeyApi.getMatchSaves(matchData.id),
         hockeyApi.getMatchCards(matchData.id),
-        hockeyApi.getMatchPenalties(matchData.id),
+        hockeyApi.getMatchPenaltyMisses(matchData.id),
         hockeyApi.getMatchShootouts(matchData.id),
       ]);
       
       setGoals(goalsData);
       setSaves(savesData);
       setCards(cardsData);
-      setPenalties(penaltiesData);
+      setPenaltyMisses(penaltyMissesData);
       setShootouts(shootoutsData);
       
       // Restaurar previous lengths usando los valores guardados
@@ -605,57 +605,102 @@ const MatchSpectator: React.FC = () => {
       {/* Penalty corner / Stroke */}
       <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-white/20 mt-2">
         <h3 className="text-white font-bold mb-2 text-sm md:text-base">🎯 Penalty corner / Stroke</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white/10 rounded-lg p-3 text-center">
-            <div className="text-sm text-gray-400">Penalty corner</div>
-            <div className="text-xl font-bold text-white">
-              {penalties.filter(p => p.event_type === 'penalty_goal').length}/
-              {penalties.filter(p => p.event_type.includes('penalty')).length}
-            </div>
-            <div className="text-xs text-gray-500">
-              goles / intentos
-            </div>
-          </div>
-          <div className="bg-white/10 rounded-lg p-3 text-center">
-            <div className="text-sm text-gray-400">Stroke</div>
-            <div className="text-xl font-bold text-white">
-              {penalties.filter(p => p.event_type === 'stroke_goal').length}/
-              {penalties.filter(p => p.event_type.includes('stroke')).length}
-            </div>
-            <div className="text-xs text-gray-500">
-              goles / intentos
-            </div>
-          </div>
-        </div>
-        {penalties.length > 0 && (
-          <div className="mt-3 space-y-1 max-h-24 overflow-y-auto">
-            {penalties.map(penalty => (
-              <div key={penalty.id} className="flex items-center gap-2 bg-white/5 p-2 rounded text-sm">
-                <span className="text-lg">
-                  {penalty.event_type === 'penalty_goal' || penalty.event_type === 'stroke_goal' ? '✅' : '❌'}
-                </span>
-                <span
-                  className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
-                  style={{ 
-                    backgroundColor: penalty.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
-                    color: penalty.team === 'team1' ? match.team1_color : match.team2_color
-                  }}
-                >
-                  {penalty.team === 'team1' ? match.team1_name : match.team2_name}
-                </span>
-                <span className="text-gray-300 text-xs">
-                  {penalty.event_type.includes('penalty') ? 'PC' : 'Stroke'}
-                </span>
-                <span className="text-gray-400 text-xs">
-                  Q{penalty.quarter} - {penalty.match_minute}'
-                </span>
+        {(() => {
+          const penaltyGoals = goals.filter(g => g.is_penalty);
+          const penaltyMissList = penaltyMisses.filter(pm => pm.type === 'penalty');
+          const strokeMissList = penaltyMisses.filter(pm => pm.type === 'stroke');
+          const totalPenalties = penaltyGoals.length + penaltyMissList.length;
+          const totalStrokes = strokeMissList.length;
+          
+          return (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white/10 rounded-lg p-3 text-center">
+                  <div className="text-sm text-gray-400">Penalty corner</div>
+                  <div className="text-xl font-bold text-white">
+                    {penaltyGoals.length}/{totalPenalties}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    goles / intentos
+                  </div>
+                </div>
+                <div className="bg-white/10 rounded-lg p-3 text-center">
+                  <div className="text-sm text-gray-400">Stroke</div>
+                  <div className="text-xl font-bold text-white">
+                    0/{totalStrokes}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    goles / intentos
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-        )}
-        {penalties.length === 0 && (
-          <p className="text-gray-400 text-xs text-center mt-2">Sin penalties/strokes registrados</p>
-        )}
+              {(totalPenalties > 0 || totalStrokes > 0) && (
+                <div className="mt-3 space-y-1 max-h-24 overflow-y-auto">
+                  {/* Goles de penalty */}
+                  {penaltyGoals.map(goal => (
+                    <div key={goal.id} className="flex items-center gap-2 bg-white/5 p-2 rounded text-sm">
+                      <span className="text-lg">✅</span>
+                      <span
+                        className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                        style={{ 
+                          backgroundColor: goal.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                          color: goal.team === 'team1' ? match.team1_color : match.team2_color
+                        }}
+                      >
+                        {goal.team === 'team1' ? match.team1_name : match.team2_name}
+                      </span>
+                      <span className="text-gray-300 text-xs">PC Gol</span>
+                      <span className="text-gray-400 text-xs">
+                        Q{goal.quarter} - {goal.match_minute}'
+                      </span>
+                    </div>
+                  ))}
+                  {/* Misses de penalty */}
+                  {penaltyMissList.map(miss => (
+                    <div key={miss.id} className="flex items-center gap-2 bg-white/5 p-2 rounded text-sm">
+                      <span className="text-lg">❌</span>
+                      <span
+                        className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                        style={{ 
+                          backgroundColor: miss.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                          color: miss.team === 'team1' ? match.team1_color : match.team2_color
+                        }}
+                      >
+                        {miss.team === 'team1' ? match.team1_name : match.team2_name}
+                      </span>
+                      <span className="text-gray-300 text-xs">PC Fallado</span>
+                      <span className="text-gray-400 text-xs">
+                        Q{miss.quarter} - {miss.match_minute}'
+                      </span>
+                    </div>
+                  ))}
+                  {/* Misses de stroke */}
+                  {strokeMissList.map(miss => (
+                    <div key={miss.id} className="flex items-center gap-2 bg-white/5 p-2 rounded text-sm">
+                      <span className="text-lg">❌</span>
+                      <span
+                        className="px-1 md:px-2 py-0.5 rounded text-xs font-bold"
+                        style={{ 
+                          backgroundColor: miss.team === 'team1' ? match.team1_color + '40' : match.team2_color + '40',
+                          color: miss.team === 'team1' ? match.team1_color : match.team2_color
+                        }}
+                      >
+                        {miss.team === 'team1' ? match.team1_name : match.team2_name}
+                      </span>
+                      <span className="text-gray-300 text-xs">Stroke Fallado</span>
+                      <span className="text-gray-400 text-xs">
+                        Q{miss.quarter} - {miss.match_minute}'
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {totalPenalties === 0 && totalStrokes === 0 && (
+                <p className="text-gray-400 text-xs text-center mt-2">Sin penalties/strokes registrados</p>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Shootouts */}

@@ -19,6 +19,7 @@ import {
   LineupPlayer,
   HockeyShootout,
   AddShootoutInput,
+  HockeyPenaltyMiss,
 } from '../types/hockey';
 
 const getCurrentUser = async () => {
@@ -699,8 +700,8 @@ export const hockeyApi = {
     return data || [];
   },
 
-  async addPenalty(matchId: string, input: {
-    event_type: 'penalty_goal' | 'penalty_miss' | 'stroke_goal' | 'stroke_miss';
+  async addPenaltyMiss(matchId: string, input: {
+    type: 'penalty' | 'stroke';
     team: 'team1' | 'team2';
     player_id?: string;
     player_name?: string;
@@ -709,59 +710,47 @@ export const hockeyApi = {
     match_minute: number;
   }): Promise<void> {
     const { error } = await supabase
-      .from('match_events')
+      .from('hockey_penalty_misses')
       .insert([{
         match_id: matchId,
-        event_type: input.event_type,
-        team_id: input.team,
+        type: input.type,
+        team: input.team,
         player_id: input.player_id || null,
         player_name: input.player_name || null,
         dorsal: input.dorsal || null,
-        minute: input.match_minute,
         quarter: input.quarter,
+        match_minute: input.match_minute,
       }]);
 
     if (error) {
-      console.error('Error adding penalty:', error);
+      console.error('Error adding penalty miss:', error);
       throw error;
     }
   },
 
-  async getMatchPenalties(matchId: string): Promise<any[]> {
+  async getMatchPenaltyMisses(matchId: string): Promise<HockeyPenaltyMiss[]> {
     const { data, error } = await supabase
-      .from('match_events')
+      .from('hockey_penalty_misses')
       .select('*')
       .eq('match_id', matchId)
-      .in('event_type', ['penalty_goal', 'penalty_miss', 'stroke_goal', 'stroke_miss'])
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Error fetching penalties:', error);
+      console.error('Error fetching penalty misses:', error);
       return [];
     }
 
-    return (data || []).map((event: any) => ({
-      id: event.id,
-      match_id: event.match_id,
-      event_type: event.event_type,
-      team: event.team_id,
-      player_id: event.player_id,
-      player_name: event.player_name,
-      dorsal: event.dorsal,
-      quarter: event.quarter || 4,
-      match_minute: event.minute || 0,
-      created_at: event.created_at,
-    }));
+    return data || [];
   },
 
-  async removePenalty(id: string): Promise<void> {
+  async removePenaltyMiss(id: string): Promise<void> {
     const { error } = await supabase
-      .from('match_events')
+      .from('hockey_penalty_misses')
       .delete()
       .eq('id', id);
 
     if (error) {
-      console.error('Error removing penalty:', error);
+      console.error('Error removing penalty miss:', error);
       throw error;
     }
   },
