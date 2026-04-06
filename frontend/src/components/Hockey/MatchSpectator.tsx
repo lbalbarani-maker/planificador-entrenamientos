@@ -158,6 +158,17 @@ const MatchSpectator: React.FC = () => {
     };
   }, [match?.id]);
 
+  // Polling de respaldo cada 3 segundos (para cuando WebSocket está bloqueado)
+  useEffect(() => {
+    if (!match?.id) return;
+    
+    const pollInterval = setInterval(() => {
+      loadMatch();
+    }, 3000);
+    
+    return () => clearInterval(pollInterval);
+  }, [match?.id]);
+
   useEffect(() => {
     if (isInitialLoad.current) return;
     if (goals.length > previousGoalsLength.current) {
