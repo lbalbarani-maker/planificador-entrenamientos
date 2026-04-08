@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
-import { convocationApi, clubsApi, eventsApi } from '../../lib/supabaseTeams';
+import { convocationApi, clubsApi, eventsApi, teamsApi } from '../../lib/supabaseTeams';
 import { supabase } from '../../lib/supabase';
 import { HockeyMatch, HockeyPlayer, HockeyGoal, HockeySave, HockeyCard, MatchLineup, CardType, HockeyPenaltyMiss, HockeyShootout } from '../../types/hockey';
 import { generateMatchPDF } from '../../lib/pdfExport';
@@ -67,6 +67,9 @@ const MatchAdmin: React.FC = () => {
   const [shootoutTeam, setShootoutTeam] = useState<'team1' | 'team2'>('team1');
   const [shootoutScored, setShootoutScored] = useState<boolean>(true);
   const [selectedShootoutPlayer, setSelectedShootoutPlayer] = useState<string>('');
+
+  // Team info for PDF
+  const [teamInfo, setTeamInfo] = useState<{ name: string; category: string; gender: string } | null>(null);
 
   useEffect(() => {
     if (id) loadMatch();
@@ -311,16 +314,24 @@ const MatchAdmin: React.FC = () => {
         if (club2?.logo_url) logo2 = club2.logo_url;
       }
       
-      // Si hay evento, obtener logo desde el club del equipo
-      if (matchData.event_id && !logo1) {
+      // Si hay evento, obtener logo desde el club del equipo y datos del team
+      if (matchData.event_id) {
         const eventData = await eventsApi.getEvent(matchData.event_id);
-        if (eventData?.team?.club?.logo_url) {
+        if (eventData?.team?.club?.logo_url && !logo1) {
           logo1 = eventData.team.club.logo_url;
         }
         // Obtener la convocatoria final del evento
         if (eventData?.final_convocation) {
           const finalConv = JSON.parse(eventData.final_convocation);
           setFinalConvocation(finalConv);
+        }
+        // Obtener información del team para el PDF
+        if (eventData?.team) {
+          setTeamInfo({
+            name: eventData.team.name,
+            category: eventData.team.category,
+            gender: eventData.team.gender
+          });
         }
       }
       
@@ -804,6 +815,10 @@ const MatchAdmin: React.FC = () => {
                     cards,
                     penaltyMisses,
                     shootouts,
+                    teamInfo: teamInfo || undefined,
+                    team1LogoUrl: team1Logo,
+                    team2LogoUrl: team2Logo,
+                    clubLogoUrl: '/images/logosanse.png',
                   });
                 } catch (error) {
                   console.error('Error generating PDF:', error);
