@@ -816,8 +816,8 @@ const MatchAdmin: React.FC = () => {
                     penaltyMisses,
                     shootouts,
                     teamInfo: teamInfo || undefined,
-                    team1LogoUrl: team1Logo,
-                    team2LogoUrl: team2Logo,
+                    team1LogoUrl: team1Logo || undefined,
+                    team2LogoUrl: team2Logo || undefined,
                     clubLogoUrl: '/images/logosanse.png',
                   });
                 } catch (error) {

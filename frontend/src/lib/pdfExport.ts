@@ -34,6 +34,13 @@ const COLORS = {
   cardGreen: [34, 197, 94] as [number, number, number],
 };
 
+// Colores más claros para el segundo equipo (sin usar alpha)
+const LIGHT_COLORS = {
+  cardGreen: [150, 230, 170] as [number, number, number],
+  cardYellow: [255, 230, 150] as [number, number, number],
+  cardRed: [255, 150, 150] as [number, number, number],
+};
+
 // Helper para cargar imagen desde URL
 const loadImage = (url: string): Promise<HTMLImageElement> => {
   return new Promise((resolve, reject) => {
@@ -123,22 +130,19 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     if (data1.some(v => v > 0)) {
       doc.setDrawColor(...colors[0]);
       doc.setLineWidth(2);
-      let pathStarted = false;
       
+      for (let i = 0; i < data1.length - 1; i++) {
+        const x1 = chartX + i * stepX;
+        const y1 = yPos + height - (data1[i] / maxValue) * height;
+        const x2 = chartX + (i + 1) * stepX;
+        const y2 = yPos + height - (data1[i + 1] / maxValue) * height;
+        doc.line(x1, y1, x2, y2);
+      }
+      
+      // Puntos
       data1.forEach((value, i) => {
         const x = chartX + i * stepX;
         const chartY = yPos + height - (value / maxValue) * height;
-        
-        if (!pathStarted) {
-          doc.moveTo(x, chartY);
-          pathStarted = true;
-        } else {
-          doc.lineTo(x, chartY);
-          doc.stroke();
-          doc.moveTo(x, chartY);
-        }
-        
-        // Punto
         doc.setFillColor(...colors[0]);
         doc.circle(x, chartY, 2, 'F');
       });
@@ -148,22 +152,19 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     if (data2 && data2.some(v => v > 0)) {
       doc.setDrawColor(...colors[1]);
       doc.setLineWidth(2);
-      let pathStarted = false;
       
+      for (let i = 0; i < data2.length - 1; i++) {
+        const x1 = chartX + i * stepX;
+        const y1 = yPos + height - (data2[i] / maxValue) * height;
+        const x2 = chartX + (i + 1) * stepX;
+        const y2 = yPos + height - (data2[i + 1] / maxValue) * height;
+        doc.line(x1, y1, x2, y2);
+      }
+      
+      // Puntos
       data2.forEach((value, i) => {
         const x = chartX + i * stepX;
         const chartY = yPos + height - (value / maxValue) * height;
-        
-        if (!pathStarted) {
-          doc.moveTo(x, chartY);
-          pathStarted = true;
-        } else {
-          doc.lineTo(x, chartY);
-          doc.stroke();
-          doc.moveTo(x, chartY);
-        }
-        
-        // Punto
         doc.setFillColor(...colors[1]);
         doc.circle(x, chartY, 2, 'F');
       });
@@ -182,8 +183,8 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     return yPos + height + 15;
   };
 
-  // Función para dibujar gráfico circular (torta)
-  const drawPieChart = (
+  // Función para dibujar indicador circular simple (en lugar de gráfico de torta)
+  const drawCircularIndicator = (
     success: number,
     failed: number,
     x: number,
@@ -198,37 +199,49 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       doc.circle(x, yPos, radius, 'F');
       doc.setTextColor(...COLORS.gray);
       doc.setFontSize(10);
-      centerText('Sin datos', yPos + 3);
+      const text = 'Sin datos';
+      const textWidth = doc.getTextWidth(text);
+      doc.text(text, x - textWidth / 2, yPos + 3);
       return;
     }
     
-    const successAngle = (success / total) * 2 * Math.PI;
+    const successPercent = Math.round((success / total) * 100);
     
-    // Dibujar sector de éxito
-    doc.setFillColor(...COLORS.success);
-    doc.moveTo(x, yPos);
-    doc.arc(x, yPos, radius, 0, successAngle);
-    doc.closePath();
-    doc.fill();
+    // Círculo exterior con color según éxito
+    if (successPercent >= 50) {
+      doc.setFillColor(...COLORS.success);
+    } else {
+      doc.setFillColor(...COLORS.error);
+    }
+    doc.circle(x, yPos, radius, 'F');
     
-    // Dibujar sector de fallo
-    doc.setFillColor(...COLORS.error);
-    doc.moveTo(x, yPos);
-    doc.arc(x, yPos, radius, successAngle, 2 * Math.PI);
-    doc.closePath();
-    doc.fill();
-    
-    // Centro blanco para efecto donut
+    // Anillo interior
     doc.setFillColor(...COLORS.white);
+    doc.circle(x, yPos, radius * 0.7, 'F');
+    
+    // Color de fondo del círculo central según proporción
+    if (successPercent >= 50) {
+      doc.setFillColor(...COLORS.success);
+    } else {
+      doc.setFillColor(...COLORS.error);
+    }
     doc.circle(x, yPos, radius * 0.5, 'F');
     
     // Texto central
-    doc.setTextColor(...COLORS.black);
-    doc.setFontSize(12);
+    doc.setTextColor(...COLORS.white);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    const percentText = `${Math.round((success / total) * 100)}%`;
+    const percentText = `${successPercent}%`;
     const textWidth = doc.getTextWidth(percentText);
-    doc.text(percentText, x - textWidth / 2, yPos + 2);
+    doc.text(percentText, x - textWidth / 2, yPos + 3);
+    
+    // Leyenda debajo
+    doc.setTextColor(...COLORS.black);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    const legendText = `${success}/${total}`;
+    const legendWidth = doc.getTextWidth(legendText);
+    doc.text(legendText, x - legendWidth / 2, yPos + radius + 8);
   };
 
   // Función para dibujar gráfico de barras para tarjetas
@@ -241,7 +254,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
     const chartWidth = pageWidth - margin * 2 - 20;
     const chartX = margin + 10;
-    const barWidth = chartWidth / 8 - 2; // 2 barras por cuarto
+    const barWidth = chartWidth / 8 - 2;
     const maxValue = Math.max(
       team1Data.green + team1Data.yellow + team1Data.red,
       team2Data.green + team2Data.yellow + team2Data.red,
@@ -272,59 +285,49 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     quarters.forEach((q, i) => {
       const xBase = chartX + i * (chartWidth / 4) + 5;
       
-      // Team 1
+      // Team 1 (colores normales)
       let currentY = yPos + height;
       const t1 = team1ByQuarter[i];
       
-      // Verde
       if (t1.g > 0) {
         const h = (t1.g / maxValue) * height;
         doc.setFillColor(...COLORS.cardGreen);
         doc.rect(xBase, currentY - h, barWidth, h, 'F');
         currentY -= h;
       }
-      // Amarilla
       if (t1.y > 0) {
         const h = (t1.y / maxValue) * height;
         doc.setFillColor(...COLORS.cardYellow);
         doc.rect(xBase, currentY - h, barWidth, h, 'F');
         currentY -= h;
       }
-      // Roja
       if (t1.r > 0) {
         const h = (t1.r / maxValue) * height;
         doc.setFillColor(...COLORS.cardRed);
         doc.rect(xBase, currentY - h, barWidth, h, 'F');
       }
       
-      // Team 2
+      // Team 2 (colores más claros, sin alpha)
       currentY = yPos + height;
       const t2 = team2ByQuarter[i];
       
-      // Verde
       if (t2.g > 0) {
         const h = (t2.g / maxValue) * height;
-        doc.setFillColor(...COLORS.cardGreen);
-        doc.setGlobalAlpha(0.5);
+        doc.setFillColor(...LIGHT_COLORS.cardGreen);
         doc.rect(xBase + barWidth + 2, currentY - h, barWidth, h, 'F');
         currentY -= h;
       }
-      // Amarilla
       if (t2.y > 0) {
         const h = (t2.y / maxValue) * height;
-        doc.setFillColor(...COLORS.cardYellow);
-        doc.setGlobalAlpha(0.5);
+        doc.setFillColor(...LIGHT_COLORS.cardYellow);
         doc.rect(xBase + barWidth + 2, currentY - h, barWidth, h, 'F');
         currentY -= h;
       }
-      // Roja
       if (t2.r > 0) {
         const h = (t2.r / maxValue) * height;
-        doc.setFillColor(...COLORS.cardRed);
-        doc.setGlobalAlpha(0.5);
+        doc.setFillColor(...LIGHT_COLORS.cardRed);
         doc.rect(xBase + barWidth + 2, currentY - h, barWidth, h, 'F');
       }
-      doc.setGlobalAlpha(1);
       
       // Label
       doc.setTextColor(...COLORS.gray);
@@ -614,7 +617,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     
     y = drawSection(`🎯 PENALTY CORNER (${totalPenalties})`, y);
     
-    // Gráficos circulares
+    // Indicadores circulares
     const team1PenaltyGoals = penaltyGoals.filter(g => g.team === 'team1').length;
     const team1PenaltyMiss = penaltyMissList.filter(pm => pm.team === 'team1').length;
     const team2PenaltyGoals = penaltyGoals.filter(g => g.team === 'team2').length;
@@ -623,14 +626,14 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     const chartY = y + 30;
     
     // Team 1
-    drawPieChart(team1PenaltyGoals, team1PenaltyMiss, margin + 50, chartY, 25);
+    drawCircularIndicator(team1PenaltyGoals, team1PenaltyMiss, margin + 50, chartY, 25);
     doc.setTextColor(...COLORS.black);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text(match.team1_name, margin + 35, chartY + 35);
     
     // Team 2
-    drawPieChart(team2PenaltyGoals, team2PenaltyMiss, pageWidth - margin - 50, chartY, 25);
+    drawCircularIndicator(team2PenaltyGoals, team2PenaltyMiss, pageWidth - margin - 50, chartY, 25);
     doc.text(match.team2_name, pageWidth - margin - 65, chartY + 35);
     
     y += 75;
@@ -658,21 +661,21 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     
     y = drawSection(`🎯 STROKES (${strokeMissList.length})`, y);
     
-    // Gráficos circulares
+    // Indicadores circulares
     const team1Strokes = strokeMissList.filter(pm => pm.team === 'team1').length;
     const team2Strokes = strokeMissList.filter(pm => pm.team === 'team2').length;
     
     const chartY = y + 30;
     
     // Team 1
-    drawPieChart(0, team1Strokes, margin + 50, chartY, 25);
+    drawCircularIndicator(0, team1Strokes, margin + 50, chartY, 25);
     doc.setTextColor(...COLORS.black);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text(match.team1_name, margin + 35, chartY + 35);
     
     // Team 2
-    drawPieChart(0, team2Strokes, pageWidth - margin - 50, chartY, 25);
+    drawCircularIndicator(0, team2Strokes, pageWidth - margin - 50, chartY, 25);
     doc.text(match.team2_name, pageWidth - margin - 65, chartY + 35);
     
     y += 75;
