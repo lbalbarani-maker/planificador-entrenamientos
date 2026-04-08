@@ -328,9 +328,9 @@ const MatchAdmin: React.FC = () => {
         // Obtener información del team para el PDF
         if (eventData?.team) {
           setTeamInfo({
-            name: eventData.team.name,
-            category: eventData.team.category,
-            gender: eventData.team.gender
+            name: eventData.team.name || '',
+            category: eventData.team.category || '',
+            gender: eventData.team.gender || ''
           });
         }
       }
