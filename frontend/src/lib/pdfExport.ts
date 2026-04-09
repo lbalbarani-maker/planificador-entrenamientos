@@ -21,6 +21,7 @@ interface PDFData {
 // Colores del diseño
 const COLORS = {
   sanseBlue: [30, 58, 138] as [number, number, number], // #1e3a8a
+  sanseRed: [220, 38, 38] as [number, number, number], // #dc2626
   white: [255, 255, 255] as [number, number, number],
   black: [0, 0, 0] as [number, number, number],
   gray: [100, 100, 100] as [number, number, number],
@@ -40,6 +41,9 @@ const LIGHT_COLORS = {
   cardYellow: [255, 230, 150] as [number, number, number],
   cardRed: [255, 150, 150] as [number, number, number],
 };
+
+// Logo del club Sanse (URL del bucket público)
+const SANSE_LOGO_URL = 'https://rtyxufscynjpxuliwlpm.supabase.co/storage/v1/object/public/Public%20bucket/logos/1772731926231-k9pk0a.jpg';
 
 // Helper para cargar imagen desde URL
 const loadImage = (url: string): Promise<HTMLImageElement> => {
@@ -66,13 +70,49 @@ const getBase64Image = (img: HTMLImageElement): string => {
 };
 
 export const generateMatchPDF = async (data: PDFData): Promise<void> => {
-  const { match, goals, saves, cards, penaltyMisses, shootouts, teamInfo, team1LogoUrl, team2LogoUrl, clubLogoUrl } = data;
+  const { match, goals, saves, cards, penaltyMisses, shootouts, teamInfo, team1LogoUrl, team2LogoUrl } = data;
   
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   let y = 20;
   const margin = 15;
+  
+  // ============ PRECARGA DE LOGOS ============
+  const logoCache: { [key: string]: string | null } = {
+    club: null,
+    team1: null,
+    team2: null,
+  };
+  
+  try {
+    const clubImg = await loadImage(SANSE_LOGO_URL);
+    logoCache.club = getBase64Image(clubImg);
+  } catch (e) {
+    console.log('No se pudo cargar logo del club');
+  }
+  
+  if (team1LogoUrl) {
+    try {
+      const t1Img = await loadImage(team1LogoUrl);
+      logoCache.team1 = getBase64Image(t1Img);
+    } catch (e) {
+      console.log('No se pudo cargar logo team1');
+    }
+  }
+  
+  if (team2LogoUrl) {
+    try {
+      const t2Img = await loadImage(team2LogoUrl);
+      logoCache.team2 = getBase64Image(t2Img);
+    } catch (e) {
+      console.log('No se pudo cargar logo team2');
+    }
+  }
+  
+  // Fallback: si no hay logo de equipo, usar logo del club
+  if (!logoCache.team1) logoCache.team1 = logoCache.club;
+  if (!logoCache.team2) logoCache.team2 = logoCache.club;
   
   // Función para centrar texto
   const centerText = (text: string, yPos: number, fontSize: number = 12) => {
@@ -83,17 +123,47 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
 
   // Función para dibujar sección con título
   const drawSection = (title: string, yPos: number): number => {
-    // Fondo del título
     doc.setFillColor(...COLORS.sanseBlue);
     doc.roundedRect(margin, yPos, pageWidth - margin * 2, 12, 3, 3, 'F');
-    
-    // Texto del título
     doc.setTextColor(...COLORS.white);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text(title, margin + 5, yPos + 8);
-    
     return yPos + 16;
+  };
+
+  // Función para dibujar logo junto a texto
+  const drawLogoWithText = (
+    logoKey: 'team1' | 'team2' | 'club',
+    text: string,
+    x: number,
+    yPos: number,
+    fontSize: number = 10,
+    isBold: boolean = false
+  ): number => {
+    const logoSize = 10;
+    const logoMargin = 3;
+    
+    // Dibujar logo si existe
+    if (logoCache[logoKey]) {
+      doc.addImage(logoCache[logoKey]!, 'PNG', x, yPos - logoSize + 2, logoSize, logoSize);
+    } else {
+      // Fallback: círculo con iniciales
+      doc.setFillColor(...COLORS.lightGray);
+      doc.circle(x + logoSize/2, yPos - logoSize/2 + 2, logoSize/2, 'F');
+      doc.setTextColor(...COLORS.white);
+      doc.setFontSize(6);
+      const initials = text.substring(0, 2).toUpperCase();
+      doc.text(initials, x + 2, yPos - 1);
+    }
+    
+    // Dibujar texto
+    doc.setTextColor(...COLORS.black);
+    doc.setFontSize(fontSize);
+    doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+    doc.text(text, x + logoSize + logoMargin, yPos);
+    
+    return x + logoSize + logoMargin + doc.getTextWidth(text);
   };
 
   // Función para dibujar gráfico de líneas
@@ -109,24 +179,20 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     const chartX = margin + 10;
     const maxValue = Math.max(...data1, ...(data2 || []), 1);
     
-    // Dibujar ejes
     doc.setDrawColor(...COLORS.lightGray);
     doc.setLineWidth(0.5);
     
-    // Líneas horizontales de grid
     for (let i = 0; i <= 4; i++) {
       const gridY = yPos + height - (i * height / 4);
       doc.line(chartX, gridY, chartX + chartWidth, gridY);
     }
     
-    // Líneas verticales
     const stepX = chartWidth / (labels.length - 1);
     labels.forEach((_, i) => {
       const x = chartX + i * stepX;
       doc.line(x, yPos, x, yPos + height);
     });
     
-    // Dibujar línea de datos 1
     if (data1.some(v => v > 0)) {
       doc.setDrawColor(...colors[0]);
       doc.setLineWidth(2);
@@ -139,7 +205,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
         doc.line(x1, y1, x2, y2);
       }
       
-      // Puntos
       data1.forEach((value, i) => {
         const x = chartX + i * stepX;
         const chartY = yPos + height - (value / maxValue) * height;
@@ -148,7 +213,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       });
     }
     
-    // Dibujar línea de datos 2
     if (data2 && data2.some(v => v > 0)) {
       doc.setDrawColor(...colors[1]);
       doc.setLineWidth(2);
@@ -161,7 +225,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
         doc.line(x1, y1, x2, y2);
       }
       
-      // Puntos
       data2.forEach((value, i) => {
         const x = chartX + i * stepX;
         const chartY = yPos + height - (value / maxValue) * height;
@@ -170,7 +233,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       });
     }
     
-    // Labels del eje X
     doc.setTextColor(...COLORS.gray);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
@@ -183,7 +245,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     return yPos + height + 15;
   };
 
-  // Función para dibujar indicador circular simple (en lugar de gráfico de torta)
+  // Función para dibujar indicador circular
   const drawCircularIndicator = (
     success: number,
     failed: number,
@@ -194,7 +256,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     const total = success + failed;
     
     if (total === 0) {
-      // Círculo gris vacío
       doc.setFillColor(...COLORS.lightGray);
       doc.circle(x, yPos, radius, 'F');
       doc.setTextColor(...COLORS.gray);
@@ -207,7 +268,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     
     const successPercent = Math.round((success / total) * 100);
     
-    // Círculo exterior con color según éxito
     if (successPercent >= 50) {
       doc.setFillColor(...COLORS.success);
     } else {
@@ -215,11 +275,9 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     }
     doc.circle(x, yPos, radius, 'F');
     
-    // Anillo interior
     doc.setFillColor(...COLORS.white);
     doc.circle(x, yPos, radius * 0.7, 'F');
     
-    // Color de fondo del círculo central según proporción
     if (successPercent >= 50) {
       doc.setFillColor(...COLORS.success);
     } else {
@@ -227,7 +285,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     }
     doc.circle(x, yPos, radius * 0.5, 'F');
     
-    // Texto central
     doc.setTextColor(...COLORS.white);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -235,7 +292,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     const textWidth = doc.getTextWidth(percentText);
     doc.text(percentText, x - textWidth / 2, yPos + 3);
     
-    // Leyenda debajo
     doc.setTextColor(...COLORS.black);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
@@ -261,7 +317,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       1
     );
     
-    // Agrupar tarjetas por cuarto
     const team1ByQuarter = [{g:0,y:0,r:0}, {g:0,y:0,r:0}, {g:0,y:0,r:0}, {g:0,y:0,r:0}];
     const team2ByQuarter = [{g:0,y:0,r:0}, {g:0,y:0,r:0}, {g:0,y:0,r:0}, {g:0,y:0,r:0}];
     
@@ -281,11 +336,9 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       }
     });
     
-    // Dibujar barras
     quarters.forEach((q, i) => {
       const xBase = chartX + i * (chartWidth / 4) + 5;
       
-      // Team 1 (colores normales)
       let currentY = yPos + height;
       const t1 = team1ByQuarter[i];
       
@@ -307,7 +360,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
         doc.rect(xBase, currentY - h, barWidth, h, 'F');
       }
       
-      // Team 2 (colores más claros, sin alpha)
       currentY = yPos + height;
       const t2 = team2ByQuarter[i];
       
@@ -329,53 +381,49 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
         doc.rect(xBase + barWidth + 2, currentY - h, barWidth, h, 'F');
       }
       
-      // Label
       doc.setTextColor(...COLORS.gray);
       doc.setFontSize(9);
       doc.text(q, xBase + barWidth - 2, yPos + height + 8);
     });
     
-    // Línea base
     doc.setDrawColor(...COLORS.lightGray);
     doc.line(chartX, yPos + height, chartX + chartWidth, yPos + height);
     
     return yPos + height + 15;
   };
 
-  // ============ HEADER ============
+  // ============ HEADER CON FONDO ROJO ============
   
-  // Logo del club
+  // Fondo rojo Sanse
+  doc.setFillColor(...COLORS.sanseRed);
+  doc.rect(0, 0, pageWidth, 40, 'F');
+  
+  // Logo del club (centrado verticalmente en el header)
   try {
-    const logoUrl = clubLogoUrl || '/images/logosanse.png';
-    const logoImg = await loadImage(logoUrl);
-    const logoData = getBase64Image(logoImg);
-    if (logoData) {
-      doc.addImage(logoData, 'PNG', margin, 10, 30, 30);
+    if (logoCache.club) {
+      doc.addImage(logoCache.club, 'PNG', margin, 5, 30, 30);
     }
   } catch (e) {
-    // Si no carga el logo, continuar sin él
+    // Si no carga, continuar sin logo
   }
   
-  // Título principal
-  doc.setTextColor(...COLORS.sanseBlue);
-  doc.setFontSize(24);
+  // Título principal (blanco sobre rojo)
+  doc.setTextColor(...COLORS.white);
+  doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
-  centerText('RESUMEN DEL PARTIDO', 25, 24);
+  centerText('RESUMEN DEL PARTIDO', 20, 22);
   
-  // Subtítulo con categoría
+  // Subtítulo con categoría (sin duplicar género)
   if (teamInfo) {
-    doc.setTextColor(...COLORS.gray);
-    doc.setFontSize(14);
-    const genderText = teamInfo.gender === 'fem' ? 'Femenina' : teamInfo.gender === 'masc' ? 'Masculina' : '';
-    const categoryText = `${teamInfo.name} ${genderText}`.trim();
-    centerText(categoryText, 35, 14);
+    doc.setFontSize(12);
+    // Usar solo el nombre que ya incluye la categoría completa
+    centerText(teamInfo.name, 32, 12);
   }
   
   y = 50;
   
   // ============ INFO DEL PARTIDO ============
   
-  // Fecha con icono de calendario (usando emoji)
   doc.setTextColor(...COLORS.black);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
@@ -386,11 +434,10 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     month: '2-digit', 
     year: 'numeric'
   });
-  doc.text(`📅 ${dateStr}`, margin, y);
+  doc.text(`Fecha: ${dateStr}`, margin, y);
   
-  // Ubicación
   if (match.location) {
-    doc.text(`📍 ${match.location}`, margin + 60, y);
+    doc.text(`Lugar: ${match.location}`, margin + 60, y);
   }
   
   y += 15;
@@ -401,82 +448,58 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   doc.setFillColor(245, 247, 250);
   doc.roundedRect(margin, y, pageWidth - margin * 2, 45, 5, 5, 'F');
   
-  // Logos y nombres de equipos
   const centerX = pageWidth / 2;
+  const logoSize = 25;
+  const scoreY = y + 28;
   
-  // Team 1 (izquierda)
-  try {
-    if (team1LogoUrl) {
-      const logo1Img = await loadImage(team1LogoUrl);
-      const logo1Data = getBase64Image(logo1Img);
-      if (logo1Data) {
-        doc.addImage(logo1Data, 'PNG', margin + 10, y + 5, 25, 25);
-      }
-    }
-  } catch (e) {
-    // Fallback: iniciales
+  // Logo Team 1 (izquierda)
+  if (logoCache.team1) {
+    doc.addImage(logoCache.team1, 'PNG', margin + 10, y + 10, logoSize, logoSize);
+  } else {
     doc.setFillColor(...COLORS.lightGray);
-    doc.circle(margin + 22, y + 17, 12, 'F');
-    doc.setTextColor(...COLORS.white);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    const initials = match.team1_name.substring(0, 2).toUpperCase();
-    doc.text(initials, margin + 18, y + 20);
+    doc.circle(margin + 10 + logoSize/2, y + 10 + logoSize/2, logoSize/2, 'F');
   }
   
-  // Nombre team 1
+  // Nombre Team 1 (debajo del logo)
   doc.setTextColor(...COLORS.black);
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  const team1Name = match.team1_name;
-  const team1Width = doc.getTextWidth(team1Name);
-  doc.text(team1Name, centerX - 50 - team1Width, y + 20);
+  const team1Width = doc.getTextWidth(match.team1_name);
+  doc.text(match.team1_name, margin + 10 + (logoSize - team1Width) / 2, y + 45);
   
-  // Score team 1
-  doc.setFontSize(28);
-  doc.setFont('helvetica', 'bold');
-  doc.text(match.score_team1.toString(), centerX - 35, y + 25);
+  // Score Team 1
+  doc.setFontSize(32);
+  doc.text(match.score_team1.toString(), centerX - 45, scoreY);
   
   // VS
   doc.setTextColor(...COLORS.gray);
-  doc.setFontSize(14);
-  doc.text('VS', centerX - 5, y + 22);
+  doc.setFontSize(16);
+  doc.text('VS', centerX - 6, scoreY - 2);
   
-  // Score team 2
+  // Score Team 2
   doc.setTextColor(...COLORS.black);
-  doc.setFontSize(28);
-  doc.text(match.score_team2.toString(), centerX + 10, y + 25);
+  doc.setFontSize(32);
+  doc.text(match.score_team2.toString(), centerX + 15, scoreY);
   
-  // Nombre team 2
-  doc.setFontSize(12);
-  doc.text(match.team2_name, centerX + 30, y + 20);
-  
-  // Team 2 logo (derecha)
-  try {
-    if (team2LogoUrl) {
-      const logo2Img = await loadImage(team2LogoUrl);
-      const logo2Data = getBase64Image(logo2Img);
-      if (logo2Data) {
-        doc.addImage(logo2Data, 'PNG', pageWidth - margin - 35, y + 5, 25, 25);
-      }
-    }
-  } catch (e) {
-    // Fallback: iniciales
+  // Logo Team 2 (derecha)
+  if (logoCache.team2) {
+    doc.addImage(logoCache.team2, 'PNG', pageWidth - margin - 10 - logoSize, y + 10, logoSize, logoSize);
+  } else {
     doc.setFillColor(...COLORS.lightGray);
-    doc.circle(pageWidth - margin - 22, y + 17, 12, 'F');
-    doc.setTextColor(...COLORS.white);
-    doc.setFontSize(10);
-    const initials = match.team2_name.substring(0, 2).toUpperCase();
-    doc.text(initials, pageWidth - margin - 26, y + 20);
+    doc.circle(pageWidth - margin - 10 - logoSize/2, y + 10 + logoSize/2, logoSize/2, 'F');
   }
+  
+  // Nombre Team 2 (debajo del logo)
+  doc.setFontSize(11);
+  const team2Width = doc.getTextWidth(match.team2_name);
+  doc.text(match.team2_name, pageWidth - margin - 10 - logoSize + (logoSize - team2Width) / 2, y + 45);
   
   y += 55;
   
   // ============ GOLES ============
   if (goals.length > 0) {
-    y = drawSection(`⚽ GOLES (${goals.length})`, y);
+    y = drawSection('GOLES', y);
     
-    // Gráfico de líneas
     const team1GoalsByQuarter = [0, 0, 0, 0];
     const team2GoalsByQuarter = [0, 0, 0, 0];
     
@@ -491,7 +514,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       [match.team1_color ? hexToRgb(match.team1_color) || COLORS.sanseBlue : COLORS.sanseBlue, 
        match.team2_color ? hexToRgb(match.team2_color) || COLORS.error : COLORS.error]);
     
-    // Listado de goles
+    // Listado de goles con logos
     doc.setTextColor(...COLORS.black);
     doc.setFontSize(9);
     
@@ -499,9 +522,8 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     const team2Goals = goals.filter(g => g.team === 'team2');
     
     if (team1Goals.length > 0) {
-      doc.setFont('helvetica', 'bold');
-      doc.text(`${match.team1_name}:`, margin + 5, y);
-      y += 6;
+      drawLogoWithText('team1', match.team1_name, margin + 5, y, 10, true);
+      y += 8;
       doc.setFont('helvetica', 'normal');
       team1Goals.forEach(g => {
         const text = `  Q${g.quarter} ${g.match_minute}' - ${g.player_name}${g.dorsal ? ` #${g.dorsal}` : ''}`;
@@ -512,9 +534,8 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     }
     
     if (team2Goals.length > 0) {
-      doc.setFont('helvetica', 'bold');
-      doc.text(`${match.team2_name}:`, margin + 5, y);
-      y += 6;
+      drawLogoWithText('team2', match.team2_name, margin + 5, y, 10, true);
+      y += 8;
       doc.setFont('helvetica', 'normal');
       team2Goals.forEach(g => {
         const text = `  Q${g.quarter} ${g.match_minute}' - ${g.player_name}${g.dorsal ? ` #${g.dorsal}` : ''}`;
@@ -528,15 +549,13 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   
   // ============ PARADAS ============
   if (saves.length > 0) {
-    // Nueva página si es necesario
     if (y > pageHeight - 100) {
       doc.addPage();
       y = 20;
     }
     
-    y = drawSection(`🧤 PARADAS (${saves.length})`, y);
+    y = drawSection('PARADAS', y);
     
-    // Gráfico de líneas solo para team 1
     const savesByQuarter = [0, 0, 0, 0];
     saves.filter(s => s.team === 'team1').forEach(s => {
       if (s.quarter >= 1 && s.quarter <= 4) {
@@ -546,9 +565,12 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     
     y = drawLineChart(savesByQuarter, null, ['Q1', 'Q2', 'Q3', 'Q4'], y, 50);
     
-    // Listado de paradas
+    // Listado de paradas con logo
     doc.setTextColor(...COLORS.black);
     doc.setFontSize(9);
+    
+    drawLogoWithText('team1', match.team1_name, margin + 5, y, 10, true);
+    y += 8;
     doc.setFont('helvetica', 'normal');
     
     saves.forEach(s => {
@@ -562,15 +584,13 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   
   // ============ TARJETAS ============
   if (cards.length > 0) {
-    // Nueva página si es necesario
     if (y > pageHeight - 100) {
       doc.addPage();
       y = 20;
     }
     
-    y = drawSection(`🟨 TARJETAS (${cards.length})`, y);
+    y = drawSection('TARJETAS', y);
     
-    // Gráfico de barras
     const team1Cards = { green: 0, yellow: 0, red: 0 };
     const team2Cards = { green: 0, yellow: 0, red: 0 };
     
@@ -588,16 +608,18 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     
     y = drawCardBarChart(team1Cards, team2Cards, y);
     
-    // Listado
+    // Listado con logos
     doc.setTextColor(...COLORS.black);
     doc.setFontSize(9);
     
     cards.forEach(c => {
-      const cardEmoji = c.card_type === 'green' ? '🟢' : c.card_type === 'yellow' ? '🟡' : '🔴';
+      const cardTypeText = c.card_type === 'green' ? 'Verde' : c.card_type === 'yellow' ? 'Amarilla' : 'Roja';
       const teamName = c.team === 'team1' ? match.team1_name : match.team2_name;
-      const text = `${cardEmoji} Q${c.quarter} ${c.match_minute}' - ${c.player_name}${c.dorsal ? ` #${c.dorsal}` : ''} (${teamName})`;
-      doc.text(text, margin + 5, y);
-      y += 5;
+      const logoKey = c.team === 'team1' ? 'team1' : 'team2';
+      
+      drawLogoWithText(logoKey, `${cardTypeText} Q${c.quarter} ${c.match_minute}'`, margin + 5, y, 9);
+      doc.text(`- ${c.player_name}${c.dorsal ? ` #${c.dorsal}` : ''} (${teamName})`, margin + 50, y);
+      y += 6;
     });
     
     y += 10;
@@ -609,15 +631,13 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   const totalPenalties = penaltyGoals.length + penaltyMissList.length;
   
   if (totalPenalties > 0) {
-    // Nueva página si es necesario
     if (y > pageHeight - 80) {
       doc.addPage();
       y = 20;
     }
     
-    y = drawSection(`🎯 PENALTY CORNER (${totalPenalties})`, y);
+    y = drawSection('PENALTY CORNER', y);
     
-    // Indicadores circulares
     const team1PenaltyGoals = penaltyGoals.filter(g => g.team === 'team1').length;
     const team1PenaltyMiss = penaltyMissList.filter(pm => pm.team === 'team1').length;
     const team2PenaltyGoals = penaltyGoals.filter(g => g.team === 'team2').length;
@@ -627,24 +647,21 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     
     // Team 1
     drawCircularIndicator(team1PenaltyGoals, team1PenaltyMiss, margin + 50, chartY, 25);
-    doc.setTextColor(...COLORS.black);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(match.team1_name, margin + 35, chartY + 35);
+    drawLogoWithText('team1', match.team1_name, margin + 20, chartY + 40, 9, true);
     
     // Team 2
     drawCircularIndicator(team2PenaltyGoals, team2PenaltyMiss, pageWidth - margin - 50, chartY, 25);
-    doc.text(match.team2_name, pageWidth - margin - 65, chartY + 35);
+    drawLogoWithText('team2', match.team2_name, pageWidth - margin - 80, chartY + 40, 9, true);
     
-    y += 75;
+    y += 65;
     
     // Leyenda
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.success);
-    doc.text('● Convertidos', margin + 5, y);
+    doc.text('Convertidos', margin + 5, y);
     doc.setTextColor(...COLORS.error);
-    doc.text('● Fallados', margin + 40, y);
+    doc.text('Fallados', margin + 40, y);
     
     y += 10;
   }
@@ -653,15 +670,13 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   const strokeMissList = penaltyMisses.filter(pm => pm.type === 'stroke');
   
   if (strokeMissList.length > 0) {
-    // Nueva página si es necesario
     if (y > pageHeight - 80) {
       doc.addPage();
       y = 20;
     }
     
-    y = drawSection(`🎯 STROKES (${strokeMissList.length})`, y);
+    y = drawSection('STROKES', y);
     
-    // Indicadores circulares
     const team1Strokes = strokeMissList.filter(pm => pm.team === 'team1').length;
     const team2Strokes = strokeMissList.filter(pm => pm.team === 'team2').length;
     
@@ -669,47 +684,45 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     
     // Team 1
     drawCircularIndicator(0, team1Strokes, margin + 50, chartY, 25);
-    doc.setTextColor(...COLORS.black);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(match.team1_name, margin + 35, chartY + 35);
+    drawLogoWithText('team1', match.team1_name, margin + 20, chartY + 40, 9, true);
     
     // Team 2
     drawCircularIndicator(0, team2Strokes, pageWidth - margin - 50, chartY, 25);
-    doc.text(match.team2_name, pageWidth - margin - 65, chartY + 35);
+    drawLogoWithText('team2', match.team2_name, pageWidth - margin - 80, chartY + 40, 9, true);
     
-    y += 75;
+    y += 65;
   }
   
   // ============ SHOOTOUTS ============
   if (shootouts.length > 0) {
-    // Nueva página si es necesario
     if (y > pageHeight - 60) {
       doc.addPage();
       y = 20;
     }
     
-    y = drawSection(`🎯 SHOOTOUTS (${shootouts.length})`, y);
+    y = drawSection('SHOOTOUTS', y);
     
     const team1Goals = shootouts.filter(s => s.team === 'team1' && s.scored).length;
     const team2Goals = shootouts.filter(s => s.team === 'team2' && s.scored).length;
     
-    // Marcador de shootouts
+    // Marcador con logos
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.black);
-    doc.text(`${match.team1_name}: ${team1Goals}`, margin + 5, y);
-    doc.text(`${match.team2_name}: ${team2Goals}`, pageWidth / 2, y);
     
-    y += 10;
+    drawLogoWithText('team1', `${match.team1_name}: ${team1Goals}`, margin + 5, y, 12, true);
+    drawLogoWithText('team2', `${match.team2_name}: ${team2Goals}`, pageWidth / 2, y, 12, true);
+    
+    y += 15;
     
     // Listado
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     shootouts.forEach((s, idx) => {
-      const result = s.scored ? '✓' : '✗';
-      const teamName = s.team === 'team1' ? match.team1_name : match.team2_name;
-      doc.text(`${idx + 1}. ${teamName} - ${s.player_name}${s.dorsal ? ` #${s.dorsal}` : ''} ${result}`, margin + 5, y);
+      const result = s.scored ? 'Gol' : 'Fallado';
+      const logoKey = s.team === 'team1' ? 'team1' : 'team2';
+      drawLogoWithText(logoKey, `${idx + 1}.`, margin + 5, y, 9);
+      doc.text(`${s.player_name}${s.dorsal ? ` #${s.dorsal}` : ''} - ${result}`, margin + 25, y);
       y += 5;
     });
   }
