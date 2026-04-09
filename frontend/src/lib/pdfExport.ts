@@ -17,6 +17,7 @@ interface PDFData {
   team2LogoUrl?: string;
   clubLogoUrl?: string;
   eventDate?: string;
+  eventLocation?: string;
 }
 
 // Colores del diseño
@@ -83,7 +84,7 @@ const getCircularImage = (img: HTMLImageElement, size: number = 100): string => 
 };
 
 export const generateMatchPDF = async (data: PDFData): Promise<void> => {
-  const { match, goals, saves, cards, penaltyMisses, shootouts, teamInfo, team1LogoUrl, team2LogoUrl, eventDate } = data;
+  const { match, goals, saves, cards, penaltyMisses, shootouts, teamInfo, team1LogoUrl, team2LogoUrl, eventDate, eventLocation } = data;
   
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -261,17 +262,17 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     const t1Width = (t1Total / maxValue) * maxWidth;
     const t1SuccessWidth = team1Success > 0 ? (team1Success / maxValue) * maxWidth : 0;
     
-    // Fondo gris
+    // Fondo gris con bordes redondeados
     doc.setFillColor(...COLORS.lightGray);
     doc.roundedRect(col1X, yPos, maxWidth, barHeight, 3, 3, 'F');
     
-    // Barra de éxito (verde)
+    // Barra de éxito (verde) - SIN BORDES REDONDEADOS
     if (t1SuccessWidth > 0) {
       doc.setFillColor(...COLORS.success);
-      doc.roundedRect(col1X, yPos, t1SuccessWidth, barHeight, 3, 3, 'F');
+      doc.rect(col1X, yPos, t1SuccessWidth, barHeight, 'F');
     }
     
-    // Barra de fallo (rojo) - empieza donde termina la verde
+    // Barra de fallo (rojo) - SIN BORDES REDONDEADOS
     if (team1Failed > 0 && t1SuccessWidth < t1Width) {
       doc.setFillColor(...COLORS.error);
       doc.rect(col1X + t1SuccessWidth, yPos, t1Width - t1SuccessWidth, barHeight, 'F');
@@ -288,17 +289,17 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     const t2Width = (t2Total / maxValue) * maxWidth;
     const t2SuccessWidth = team2Success > 0 ? (team2Success / maxValue) * maxWidth : 0;
     
-    // Fondo gris
+    // Fondo gris con bordes redondeados
     doc.setFillColor(...COLORS.lightGray);
     doc.roundedRect(col2X, yPos, maxWidth, barHeight, 3, 3, 'F');
     
-    // Barra de éxito (verde)
+    // Barra de éxito (verde) - SIN BORDES REDONDEADOS
     if (t2SuccessWidth > 0) {
       doc.setFillColor(...COLORS.success);
-      doc.roundedRect(col2X, yPos, t2SuccessWidth, barHeight, 3, 3, 'F');
+      doc.rect(col2X, yPos, t2SuccessWidth, barHeight, 'F');
     }
     
-    // Barra de fallo (rojo)
+    // Barra de fallo (rojo) - SIN BORDES REDONDEADOS
     if (team2Failed > 0 && t2SuccessWidth < t2Width) {
       doc.setFillColor(...COLORS.error);
       doc.rect(col2X + t2SuccessWidth, yPos, t2Width - t2SuccessWidth, barHeight, 'F');
@@ -396,16 +397,17 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   
-  // Fecha del evento (no created_at)
+  // Fecha del evento
   const dateStr = eventDate 
     ? new Date(eventDate).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : new Date(match.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
   doc.text(`Fecha: ${dateStr}`, margin, y);
   y += 7;
   
-  // Ubicación debajo de la fecha
-  if (match.location) {
-    doc.text(`Lugar: ${match.location}`, margin, y);
+  // Ubicación del evento (no del match)
+  const locationStr = eventLocation || match.location;
+  if (locationStr) {
+    doc.text(`Lugar: ${locationStr}`, margin, y);
     y += 8;
   } else {
     y += 8;
@@ -418,7 +420,6 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   
   const colWidth = (pageWidth - margin * 2) / 3;
   const logoSize = 22;
-  const scoreSize = 28;
   
   // Columna 1: Logo + Nombre Team 1
   const col1Center = margin + colWidth / 2;
@@ -430,19 +431,28 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
   const team1Width = doc.getTextWidth(match.team1_name);
   doc.text(match.team1_name, col1Center - team1Width / 2, y + 38);
   
-  // Columna 2: Scores + VS
+  // Columna 2: Scores + VS - CENTRADOS EN EL MISMO EJE Y
   const col2Center = margin + colWidth + colWidth / 2;
+  const scoreY = y + 30;
   
-  doc.setFontSize(scoreSize);
-  doc.text(match.score_team1.toString(), col2Center - 25, y + 32);
+  // Score 1
+  doc.setFontSize(28);
+  doc.setFont('helvetica', 'bold');
+  const score1Width = doc.getTextWidth(match.score_team1.toString());
+  doc.text(match.score_team1.toString(), col2Center - 20 - score1Width / 2, scoreY);
   
+  // VS
   doc.setTextColor(...COLORS.gray);
   doc.setFontSize(14);
-  doc.text('VS', col2Center - 8, y + 28);
+  const vsWidth = doc.getTextWidth('VS');
+  doc.text('VS', col2Center - vsWidth / 2, scoreY - 2);
   
+  // Score 2
   doc.setTextColor(...COLORS.black);
-  doc.setFontSize(scoreSize);
-  doc.text(match.score_team2.toString(), col2Center + 5, y + 32);
+  doc.setFontSize(28);
+  doc.setFont('helvetica', 'bold');
+  const score2Width = doc.getTextWidth(match.score_team2.toString());
+  doc.text(match.score_team2.toString(), col2Center + 20 - score2Width / 2, scoreY);
   
   // Columna 3: Logo + Nombre Team 2
   const col3Center = margin + colWidth * 2 + colWidth / 2;
@@ -472,7 +482,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       [match.team1_color ? hexToRgb(match.team1_color) || COLORS.sanseBlue : COLORS.sanseBlue, 
        match.team2_color ? hexToRgb(match.team2_color) || COLORS.error : COLORS.error]);
     
-    y += 10; // Espacio extra después del gráfico
+    y += 10;
     
     // Listado de goles en 2 columnas
     const team1Goals = goals.filter(g => g.team === 'team1');
@@ -489,15 +499,18 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(match.team1_name, col1X + 15, y + 8);
-      y += 15;
+      y += 18;
       
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       team1Goals.forEach(g => {
-        let text = `Q${g.quarter} ${g.match_minute}' - ${g.player_name}${g.dorsal ? ` #${g.dorsal}` : ''}`;
+        let x = col1X;
+        x = drawQuarterTag(g.quarter, x, y);
+        let text = `${g.match_minute}' - ${g.player_name}${g.dorsal ? ` #${g.dorsal}` : ''}`;
         if (g.is_penalty) text += ' (PC)';
-        doc.text(text, col1X, y);
-        y += 6;
+        doc.setTextColor(...COLORS.black);
+        doc.text(text, x, y);
+        y += 10;
       });
     }
     
@@ -509,15 +522,18 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(match.team2_name, col2X + 15, y2 + 8);
-      y2 += 15;
+      y2 += 18;
       
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       team2Goals.forEach(g => {
-        let text = `Q${g.quarter} ${g.match_minute}' - ${g.player_name}${g.dorsal ? ` #${g.dorsal}` : ''}`;
+        let x = col2X;
+        x = drawQuarterTag(g.quarter, x, y2);
+        let text = `${g.match_minute}' - ${g.player_name}${g.dorsal ? ` #${g.dorsal}` : ''}`;
         if (g.is_penalty) text += ' (PC)';
-        doc.text(text, col2X, y2);
-        y2 += 6;
+        doc.setTextColor(...COLORS.black);
+        doc.text(text, x, y2);
+        y2 += 10;
       });
     }
     
@@ -542,7 +558,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     
     y = drawLineChart(savesByQuarter, null, ['Q1', 'Q2', 'Q3', 'Q4'], y, 50);
     
-    y += 15; // Más espacio después del gráfico
+    y += 15;
     
     // Logo y listado
     drawCircularLogo('team1', margin + 5, y, 12);
@@ -550,14 +566,17 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text(match.team1_name, margin + 20, y + 8);
-    y += 15;
+    y += 18;
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     saves.forEach(s => {
-      const text = `Q${s.quarter} ${s.match_minute}' - ${s.player_name || 'Portera'}${s.dorsal ? ` #${s.dorsal}` : ''}`;
-      doc.text(text, margin + 5, y);
-      y += 5;
+      let x = margin + 5;
+      x = drawQuarterTag(s.quarter, x, y);
+      const text = `${s.match_minute}' - ${s.player_name || 'Portera'}${s.dorsal ? ` #${s.dorsal}` : ''}`;
+      doc.setTextColor(...COLORS.black);
+      doc.text(text, x, y);
+      y += 10;
     });
     
     y += 10;
@@ -586,7 +605,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(match.team1_name, col1X + 15, y + 8);
-      y += 15;
+      y += 20;
       
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
@@ -596,7 +615,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
         x = drawQuarterTag(c.quarter, x, y);
         doc.setTextColor(...COLORS.black);
         doc.text(`${c.match_minute}' - ${c.player_name}${c.dorsal ? ` #${c.dorsal}` : ''}`, x, y);
-        y += 8;
+        y += 12;
       });
     }
     
@@ -608,7 +627,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(match.team2_name, col2X + 15, y2 + 8);
-      y2 += 15;
+      y2 += 20;
       
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
@@ -618,7 +637,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
         x = drawQuarterTag(c.quarter, x, y2);
         doc.setTextColor(...COLORS.black);
         doc.text(`${c.match_minute}' - ${c.player_name}${c.dorsal ? ` #${c.dorsal}` : ''}`, x, y2);
-        y2 += 8;
+        y2 += 12;
       });
     }
     
