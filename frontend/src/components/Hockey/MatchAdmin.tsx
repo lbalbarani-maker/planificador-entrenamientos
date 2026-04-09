@@ -70,6 +70,7 @@ const MatchAdmin: React.FC = () => {
 
   // Team info for PDF
   const [teamInfo, setTeamInfo] = useState<{ name: string; category: string; gender: string } | null>(null);
+  const [eventDate, setEventDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) loadMatch();
@@ -332,6 +333,10 @@ const MatchAdmin: React.FC = () => {
             category: eventData.team.category || '',
             gender: eventData.team.gender || ''
           });
+        }
+        // Obtener fecha del evento
+        if (eventData?.start_datetime) {
+          setEventDate(eventData.start_datetime);
         }
       }
       
@@ -819,6 +824,7 @@ const MatchAdmin: React.FC = () => {
                     team1LogoUrl: team1Logo || undefined,
                     team2LogoUrl: team2Logo || undefined,
                     clubLogoUrl: '/images/logosanse.png',
+                    eventDate: eventDate || undefined,
                   });
                 } catch (error) {
                   console.error('Error generating PDF:', error);
