@@ -99,34 +99,70 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     team2: null,
   };
   
+  // Usar logo del parámetro, o del match, o null
+  const effectiveTeam1Logo = team1LogoUrl || match.team1_logo_url || null;
+  const effectiveTeam2Logo = team2LogoUrl || match.team2_logo_url || null;
+  
+  // DEBUG: Verificar URLs de logos
+  console.log('=== PDF EXPORT DEBUG ===');
+  console.log('team1LogoUrl (parámetro):', team1LogoUrl);
+  console.log('match.team1_logo_url:', match.team1_logo_url);
+  console.log('effectiveTeam1Logo:', effectiveTeam1Logo);
+  console.log('team2LogoUrl (parámetro):', team2LogoUrl);
+  console.log('match.team2_logo_url:', match.team2_logo_url);
+  console.log('effectiveTeam2Logo:', effectiveTeam2Logo);
+  console.log('¿Son iguales?:', effectiveTeam1Logo === effectiveTeam2Logo);
+  
   try {
     const clubImg = await loadImage(SANSE_LOGO_URL);
     logoCache.club = getCircularImage(clubImg, 100);
+    console.log('Logo club cargado OK');
   } catch (e) {
     console.log('No se pudo cargar logo del club');
   }
   
-  if (team1LogoUrl) {
+  if (effectiveTeam1Logo) {
     try {
-      const t1Img = await loadImage(team1LogoUrl);
+      const t1Img = await loadImage(effectiveTeam1Logo);
       logoCache.team1 = getCircularImage(t1Img, 100);
+      console.log('Logo team1 cargado OK desde:', effectiveTeam1Logo);
     } catch (e) {
-      console.log('No se pudo cargar logo team1');
+      console.log('No se pudo cargar logo team1:', e);
     }
+  } else {
+    console.log('team1 logo es null/undefined');
   }
   
-  if (team2LogoUrl) {
+  if (effectiveTeam2Logo) {
     try {
-      const t2Img = await loadImage(team2LogoUrl);
+      const t2Img = await loadImage(effectiveTeam2Logo);
       logoCache.team2 = getCircularImage(t2Img, 100);
+      console.log('Logo team2 cargado OK desde:', effectiveTeam2Logo);
     } catch (e) {
-      console.log('No se pudo cargar logo team2');
+      console.log('No se pudo cargar logo team2:', e);
     }
+  } else {
+    console.log('team2 logo es null/undefined');
   }
+  
+  // DEBUG: Estado antes de fallback
+  console.log('Estado logoCache antes de fallback:', {
+    team1: logoCache.team1 ? 'Cargado' : 'No cargado',
+    team2: logoCache.team2 ? 'Cargado' : 'No cargado',
+    club: logoCache.club ? 'Cargado' : 'No cargado'
+  });
   
   // Fallback: si no hay logo de equipo, usar logo del club
   if (!logoCache.team1) logoCache.team1 = logoCache.club;
   if (!logoCache.team2) logoCache.team2 = logoCache.club;
+  
+  // DEBUG: Estado después de fallback
+  console.log('Estado logoCache después de fallback:', {
+    team1: logoCache.team1 ? 'Cargado' : 'No cargado',
+    team2: logoCache.team2 ? 'Cargado' : 'No cargado',
+    club: logoCache.club ? 'Cargado' : 'No cargado'
+  });
+  console.log('=== FIN DEBUG ===');
   
   // Función para centrar texto
   const centerText = (text: string, yPos: number, fontSize: number = 12) => {
@@ -510,7 +546,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
         if (g.is_penalty) text += ' (PC)';
         doc.setTextColor(...COLORS.black);
         doc.text(text, x, y);
-        y += 10;
+        y += 12;
       });
     }
     
@@ -533,7 +569,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
         if (g.is_penalty) text += ' (PC)';
         doc.setTextColor(...COLORS.black);
         doc.text(text, x, y2);
-        y2 += 10;
+        y2 += 12;
       });
     }
     
@@ -576,7 +612,7 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       const text = `${s.match_minute}' - ${s.player_name || 'Portera'}${s.dorsal ? ` #${s.dorsal}` : ''}`;
       doc.setTextColor(...COLORS.black);
       doc.text(text, x, y);
-      y += 10;
+      y += 12;
     });
     
     y += 10;
