@@ -63,6 +63,52 @@ const loadImage = (url: string): Promise<HTMLImageElement> => {
   });
 };
 
+// Helper para descargar imagen desde Supabase Storage (evita CORS)
+const downloadImageFromStorage = async (url: string): Promise<string | null> => {
+  try {
+    // Extraer el path del archivo de la URL
+    // URL: https://rtyxufscynjpxuliwlpm.supabase.co/storage/v1/object/public/Public%20bucket/logos/1772826996659-pi6q0l.jpg
+    const urlObj = new URL(url);
+    const pathMatch = urlObj.pathname.match(/\/object\/public\/([^/]+)\/(.+)/);
+    
+    if (!pathMatch) {
+      console.log('No se pudo extraer path de la URL:', url);
+      return null;
+    }
+    
+    const bucketName = decodeURIComponent(pathMatch[1]); // "Public bucket"
+    const filePath = decodeURIComponent(pathMatch[2]); // "logos/1772826996659-pi6q0l.jpg"
+    
+    console.log('Descargando desde Storage:', { bucketName, filePath });
+    
+    const { data, error } = await supabase
+      .storage
+      .from(bucketName)
+      .download(filePath);
+    
+    if (error) {
+      console.error('Error descargando desde Storage:', error);
+      return null;
+    }
+    
+    if (!data) {
+      console.log('No se recibieron datos del archivo');
+      return null;
+    }
+    
+    // Convertir blob a base64
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(data);
+    });
+  } catch (e) {
+    console.error('Error en downloadImageFromStorage:', e);
+    return null;
+  }
+};
+
 // Helper para convertir imagen a base64 circular
 const getCircularImage = (img: HTMLImageElement, size: number = 100): string => {
   const canvas = document.createElement('canvas');
@@ -128,7 +174,18 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       logoCache.team1 = getCircularImage(t1Img, 100);
       console.log('Logo team1 cargado OK desde:', effectiveTeam1Logo);
     } catch (e) {
-      console.log('No se pudo cargar logo team1:', e);
+      console.log('No se pudo cargar logo team1 directamente, intentando Storage API:', e);
+      // Intentar descargar desde Storage API (evita CORS)
+      const base64Data = await downloadImageFromStorage(effectiveTeam1Logo);
+      if (base64Data) {
+        try {
+          const t1Img = await loadImage(base64Data);
+          logoCache.team1 = getCircularImage(t1Img, 100);
+          console.log('Logo team1 cargado OK desde Storage API');
+        } catch (e2) {
+          console.log('También falló desde Storage API:', e2);
+        }
+      }
     }
   } else {
     console.log('team1 logo es null/undefined');
@@ -140,7 +197,18 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
       logoCache.team2 = getCircularImage(t2Img, 100);
       console.log('Logo team2 cargado OK desde:', effectiveTeam2Logo);
     } catch (e) {
-      console.log('No se pudo cargar logo team2:', e);
+      console.log('No se pudo cargar logo team2 directamente, intentando Storage API:', e);
+      // Intentar descargar desde Storage API (evita CORS)
+      const base64Data = await downloadImageFromStorage(effectiveTeam2Logo);
+      if (base64Data) {
+        try {
+          const t2Img = await loadImage(base64Data);
+          logoCache.team2 = getCircularImage(t2Img, 100);
+          console.log('Logo team2 cargado OK desde Storage API');
+        } catch (e2) {
+          console.log('También falló desde Storage API:', e2);
+        }
+      }
     }
   } else {
     console.log('team2 logo es null/undefined');
