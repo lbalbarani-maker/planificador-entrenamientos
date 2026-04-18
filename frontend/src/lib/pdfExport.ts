@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { supabase } from './supabase';
 import { HockeyMatch, HockeyGoal, HockeySave, HockeyCard, HockeyPenaltyMiss, HockeyShootout } from '../types/hockey';
 
 interface PDFData {
@@ -152,7 +153,43 @@ export const generateMatchPDF = async (data: PDFData): Promise<void> => {
     club: logoCache.club ? 'Cargado' : 'No cargado'
   });
   
-  // Fallback: si no hay logo de equipo, usar logo del club
+  // Si no hay logos cargados, intentar obtener desde tabla clubs (evita CORS)
+  if (!logoCache.team1 || !logoCache.team2) {
+    try {
+      console.log('Intentando obtener logos desde tabla clubs...');
+      const { data: clubs } = await supabase
+        .from('clubs')
+        .select('name, logo_url')
+        .in('name', [match.team1_name, match.team2_name]);
+      
+      if (clubs) {
+        console.log('Clubs encontrados:', clubs.map(c => c.name));
+        
+        for (const club of clubs) {
+          if (club.logo_url) {
+            try {
+              const clubImg = await loadImage(club.logo_url);
+              const circularImg = getCircularImage(clubImg, 100);
+              
+              if (club.name === match.team1_name && !logoCache.team1) {
+                logoCache.team1 = circularImg;
+                console.log('Logo team1 cargado desde clubs:', club.name);
+              } else if (club.name === match.team2_name && !logoCache.team2) {
+                logoCache.team2 = circularImg;
+                console.log('Logo team2 cargado desde clubs:', club.name);
+              }
+            } catch (e) {
+              console.log('Error cargando logo desde clubs:', club.name, e);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Error consultando tabla clubs:', e);
+    }
+  }
+  
+  // Fallback final: si no hay logo de equipo, usar logo del club
   if (!logoCache.team1) logoCache.team1 = logoCache.club;
   if (!logoCache.team2) logoCache.team2 = logoCache.club;
   
