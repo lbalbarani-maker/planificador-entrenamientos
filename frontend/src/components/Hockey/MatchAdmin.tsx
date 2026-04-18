@@ -805,6 +805,26 @@ const MatchAdmin: React.FC = () => {
     );
   }
 
+  // Función para convertir imagen a base64
+  const convertImageToBase64 = async (url: string): Promise<string | null> => {
+    if (!url) return null;
+    
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      const blob = await response.blob();
+      
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Error convirtiendo imagen a base64:', error);
+      return null;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-6">
       <div className="max-w-4xl mx-auto">
@@ -817,6 +837,15 @@ const MatchAdmin: React.FC = () => {
             <button
               onClick={async () => {
                 try {
+                  // Convertir logos a base64 antes de generar PDF
+                  const logo1Base64 = await convertImageToBase64(team1Logo);
+                  const logo2Base64 = await convertImageToBase64(team2Logo);
+                  
+                  console.log('Logos convertidos a base64:', {
+                    team1: logo1Base64 ? 'OK' : 'Falló',
+                    team2: logo2Base64 ? 'OK' : 'Falló'
+                  });
+                  
                   await generateMatchPDF({
                     match,
                     goals,
@@ -825,8 +854,8 @@ const MatchAdmin: React.FC = () => {
                     penaltyMisses,
                     shootouts,
                     teamInfo: teamInfo || undefined,
-                    team1LogoUrl: team1Logo || undefined,
-                    team2LogoUrl: team2Logo || undefined,
+                    team1LogoUrl: logo1Base64 || team1Logo || undefined,
+                    team2LogoUrl: logo2Base64 || team2Logo || undefined,
                     clubLogoUrl: '/images/logosanse.png',
                     eventDate: eventDate || undefined,
                     eventLocation: eventLocation || undefined,
