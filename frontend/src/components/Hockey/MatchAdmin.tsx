@@ -805,24 +805,39 @@ const MatchAdmin: React.FC = () => {
     );
   }
 
-  // Función para convertir imagen a base64
+  // Función para convertir imagen a base64 usando canvas (mejor para CORS)
   const convertImageToBase64 = async (url: string): Promise<string | null> => {
     if (!url) return null;
     
-    try {
-      const response = await fetch(url, { mode: 'cors' });
-      const blob = await response.blob();
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
       
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.error('Error convirtiendo imagen a base64:', error);
-      return null;
-    }
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg'));
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          console.error('Error en canvas:', e);
+          resolve(null);
+        }
+      };
+      
+      img.onerror = () => {
+        console.error('Error cargando imagen:', url);
+        resolve(null);
+      };
+      
+      img.src = url;
+    });
   };
 
   return (
