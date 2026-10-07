@@ -34,6 +34,8 @@ const MatchSpectator: React.FC = () => {
   const isInitialLoad = useRef(true);
   const previousGoalsLength = useRef(0);
   const previousSavesLength = useRef(0);
+  const matchRef = useRef<HockeyMatch | null>(null);
+  matchRef.current = match;
 
   const sendReaction = async (type: string) => {
     if (!match?.id) return;
@@ -109,7 +111,7 @@ const MatchSpectator: React.FC = () => {
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            loadMatch();
+            hockeyApi.getMatchGoals(match.id).then(setGoals);
           }
         }
       )
@@ -123,7 +125,7 @@ const MatchSpectator: React.FC = () => {
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            loadMatch();
+            hockeyApi.getMatchSaves(match.id).then(setSaves);
           }
         }
       )
@@ -144,7 +146,7 @@ const MatchSpectator: React.FC = () => {
         {
           event: "*",
           schema: "public",
-          table: "match_events",
+          table: "hockey_penalty_misses",
           filter: `match_id=eq.${match.id}`,
         },
         () => {
@@ -217,18 +219,23 @@ const MatchSpectator: React.FC = () => {
     
     try {
       const matchData = await hockeyApi.getMatchByToken(token);
-      if (!matchData || !match) return;
+      const current = matchRef.current;
+      if (!matchData || !current) return;
       
       // Solo actualizar si hay cambios significativos
       const shouldUpdate = 
-        matchData.running !== match.running ||
-        matchData.quarter !== match.quarter ||
-        matchData.status !== match.status ||
-        Math.abs(matchData.remaining_time - match.remaining_time) > 5; // Diferencia > 5 segundos
+        matchData.running !== current.running ||
+        matchData.quarter !== current.quarter ||
+        matchData.status !== current.status ||
+        matchData.score_team1 !== current.score_team1 ||
+        matchData.score_team2 !== current.score_team2 ||
+        Math.abs(matchData.remaining_time - current.remaining_time) > 5; // Diferencia > 5 segundos
       
       if (shouldUpdate) {
         setMatch(matchData);
-        setDisplayTime(matchData.remaining_time);
+        if (!(matchData.running && matchData.start_time)) {
+          setDisplayTime(matchData.remaining_time);
+        }
       }
     } catch (error) {
       console.error('Error checking match status:', error);
@@ -280,7 +287,9 @@ const MatchSpectator: React.FC = () => {
       }
       
       setMatch(matchData);
-      setDisplayTime(matchData.remaining_time);
+      if (!(matchData.running && matchData.start_time)) {
+        setDisplayTime(matchData.remaining_time);
+      }
 
       // Cargar logos de equipos/clubes
       const [teamsData, clubsData] = await Promise.all([

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { hockeyApi } from '../../lib/supabaseHockey';
 import { convocationApi, clubsApi, eventsApi, teamsApi } from '../../lib/supabaseTeams';
@@ -11,6 +11,8 @@ const MatchAdmin: React.FC = () => {
   const navigate = useNavigate();
   
   const [match, setMatch] = useState<HockeyMatch | null>(null);
+  const matchRef = useRef<HockeyMatch | null>(null);
+  matchRef.current = match;
   const [players, setPlayers] = useState<HockeyPlayer[]>([]);
   const [goals, setGoals] = useState<HockeyGoal[]>([]);
   const [saves, setSaves] = useState<HockeySave[]>([]);
@@ -264,7 +266,8 @@ const MatchAdmin: React.FC = () => {
   // Carga solo los datos del partido (sin tocar el cronómetro)
   const loadMatchData = async () => {
     try {
-      const [playersData, goalsData, savesData, cardsData, lineupData, penaltyMissesData, shootoutsData] = await Promise.all([
+      const [matchData, playersData, goalsData, savesData, cardsData, lineupData, penaltyMissesData, shootoutsData] = await Promise.all([
+        hockeyApi.getMatch(id!),
         hockeyApi.getMatchPlayers(id!),
         hockeyApi.getMatchGoals(id!),
         hockeyApi.getMatchSaves(id!),
@@ -281,6 +284,25 @@ const MatchAdmin: React.FC = () => {
       setLineup(lineupData);
       setPenaltyMisses(penaltyMissesData);
       setShootouts(shootoutsData);
+
+      // Espejo del marcador: actualiza el match solo ante cambios significativos,
+      // sin tocar el cronómetro (el efecto de 100 ms lo gestiona desde el estado)
+      if (matchData) {
+        const current = matchRef.current;
+        if (current) {
+          const shouldUpdate =
+            matchData.running !== current.running ||
+            matchData.quarter !== current.quarter ||
+            matchData.status !== current.status ||
+            matchData.start_time !== current.start_time ||
+            matchData.score_team1 !== current.score_team1 ||
+            matchData.score_team2 !== current.score_team2 ||
+            Math.abs(matchData.remaining_time - current.remaining_time) > 5;
+          if (shouldUpdate) {
+            setMatch(matchData);
+          }
+        }
+      }
     } catch (error) {
       console.error('Error loading match data:', error);
     }
@@ -1091,7 +1113,10 @@ const MatchAdmin: React.FC = () => {
                       </span>
                     </div>
                     <button
-                      onClick={() => hockeyApi.removeSave(save.id).then(loadMatch)}
+                      onClick={async () => {
+                          await hockeyApi.removeSave(save.id);
+                          setSaves(await hockeyApi.getMatchSaves(match.id));
+                        }}
                       className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
                     >
                       🗑️
@@ -1132,7 +1157,15 @@ const MatchAdmin: React.FC = () => {
                       )}
                     </div>
                     <button
-                      onClick={() => hockeyApi.removeGoal(goal.id).then(loadMatch)}
+                      onClick={async () => {
+                          await hockeyApi.removeGoal(goal.id);
+                          const [goalsData, matchData] = await Promise.all([
+                            hockeyApi.getMatchGoals(match.id),
+                            hockeyApi.getMatch(match.id),
+                          ]);
+                          setGoals(goalsData);
+                          if (matchData) setMatch(matchData);
+                        }}
                       className="text-red-400 hover:text-red-300 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center"
                     >
                       🗑️
