@@ -12,7 +12,7 @@ Se necesita un mecanismo fiable, visible y auditable, sin permisos elevados.
 - **Cron diario** en `frontend/vercel.json` (`schedule: "0 6 * * *"`, 06:00 UTC). Vercel inyecta `Authorization: Bearer ${CRON_SECRET}` en las invocaciones.
 - **Tabla de heartbeat `cron_runs`** (`id`, `ran_at`, `status`, `source`, `detail`), con **RLS activo únicamente en esta tabla** y solo dos políticas para el rol `anon`: `SELECT` e `INSERT` (sin `UPDATE` ni `DELETE`) → historial **append-only**.
 - **Clave pública (anon)** en todo momento; nunca `service_role`.
-- **Helper compartido** `src/lib/keepAlive.ts` (`runKeepAlive(client, source)`) reutilizado por el endpoint (servidor) y por el botón manual (cliente). La lectura de actividad usa la tabla ligera y sin datos personales `teams`.
+- **Lectura y heartbeat** con la misma lógica en ambos lados: `src/lib/keepAlive.ts` (`runKeepAlive(client, source)`) para el botón manual (cliente) y una implementación inline equivalente en la función serverless (CommonJS autocontenido, sin imports ESM relativos). La lectura de actividad usa la tabla ligera y sin datos personales `teams`.
 - **Panel "Configuración > Mantenimiento"** (`/configuracion`, solo admin) con estado, última ejecución automática y manual (fecha UTC + `OK`/`Error`), `detail` de error y botón "Ejecutar ahora".
 
 ## Motivo
@@ -27,7 +27,7 @@ Se necesita un mecanismo fiable, visible y auditable, sin permisos elevados.
 - **Negativo / riesgos**:
   - El historial es inmutable por diseño (no se puede limpiar desde el cliente; requiere SQL).
   - El cron corre solo en producción; no se puede verificar en local.
-  - El helper depende del cliente Supabase inyectado porque cliente (Vite `import.meta.env`) y servidor (`process.env`) usan fuentes de entorno distintas.
+  - La lógica de lectura/heartbeat está duplicada (helper del navegador y función CommonJS del servidor) porque cliente (Vite `import.meta.env`) y servidor (`process.env`) usan fuentes de entorno distintas y Vercel ejecuta la función como CommonJS.
   - La sección admin depende del guard de sesión del frontend (auth custom en `localStorage`), sin RLS por rol (ver DEC-005).
 
 ## Estado

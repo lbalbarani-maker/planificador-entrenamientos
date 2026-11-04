@@ -22,15 +22,15 @@ Evitar que el proyecto de Supabase (plan Free) se pause por inactividad mediante
   - Solo registra en logs el éxito o el código/mensaje de error. Nunca el secreto.
 - Vercel inyecta automáticamente `Authorization: Bearer ${CRON_SECRET}` en las invocaciones del cron si esa variable existe.
 
-### Lectura y heartbeat (compartido)
+### Lectura y heartbeat (panel y cron)
 
-`frontend/src/lib/keepAlive.ts` exporta `runKeepAlive(client, source)`:
+La lógica es la misma en ambos lados:
 
 1. Hace una lectura real y ligera: `teams.select('id').limit(1)` (tabla pública, sin datos personales, con `SELECT` permitido a `anon`).
 2. Inserta un heartbeat en `cron_runs` con `{ status, source, detail }`.
 3. Regla: si el heartbeat falla pero la lectura fue correcta, devuelve `ok: true`; el fallo solo se registra en el log (el mantenimiento se cumplió).
 
-El helper recibe el `SupabaseClient` como parámetro para poder reutilizarse desde el navegador (cliente Vite con `import.meta.env`, botón manual) y desde la función serverless (`process.env`). No importa `node:crypto`.
+`frontend/src/lib/keepAlive.ts` exporta `runKeepAlive(client, source)` y lo usa el panel (cliente Vite con `import.meta.env`, botón manual). La función serverless no puede importar ESM desde el runtime CommonJS de Vercel, así que incluye una implementación inline equivalente que recibe las variables `process.env`.
 
 ### Panel "Configuración > Mantenimiento"
 
@@ -81,12 +81,12 @@ SQL de creación: `scripts/phase5-cron-heartbeat.sql` (se ejecuta manualmente en
 
 ## Estado
 
-Implementado. Pendiente de verificar en producción la ejecución automática real del cron (ocurre una vez al día y solo en producción).
+Implementado y desplegado en producción (commit `cd82113`). Verificado el 2026-11-04: `401` sin header o con secreto incorrecto, `200 {"ok":true}` con `Bearer ${CRON_SECRET}`, y filas nuevas en `cron_runs` con `source='cron'` y `status='ok'`. La invocación autenticada equivalente a la del cron está validada; la primera ejecución programada por Vercel se comprobará en la próxima ventana diaria (06:00 UTC).
 
 ## Cómo probar en local
 
 1. Ejecutar `scripts/phase5-cron-heartbeat.sql` en el SQL Editor de Supabase.
-2. Definir `CRON_SECRET` en `frontend/.env` (local) y en Vercel.
+2. Definir `CRON_SECRET` en `frontend/.env.local` (ignorado por Git) y en Vercel.
 3. Levantar el proyecto y probar la función:
    - Sin header → `401`; header incorrecto → `401`; sin `CRON_SECRET` → `500`; Supabase inválido → `502`; éxito → `200 {"ok":true}`.
 4. En la UI: `/configuracion` → "Ejecutar ahora" registra `source='manual'` y actualiza estado/fechas.
