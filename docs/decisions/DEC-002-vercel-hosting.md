@@ -10,7 +10,7 @@ La app es un SPA (React + Vite) que necesita desplegarse sin servidores dedicado
 - `vercel.json`:
   - `rewrites` de todas las rutas a `/` (soporte SPA para react-router).
   - `buildCommand`: `CI=false npm install --legacy-peer-deps && npm run build`.
-  - `crons`: una vez al día (06:00 UTC) sobre `/api/cron/keep-alive` (función serverless en `frontend/api/cron/keep-alive.ts`, protegida por `CRON_SECRET`, que ejecuta una query mínima contra Supabase y registra el heartbeat; ver DEC-006).
+  - `crons`: una vez al día (06:00 UTC) sobre `/api/cron/keep-alive` (función serverless en `frontend/api/cron/keep-alive.js`, protegida por `CRON_SECRET`, que ejecuta una query mínima contra Supabase y registra el heartbeat; ver DEC-006).
 
 ## Motivo
 

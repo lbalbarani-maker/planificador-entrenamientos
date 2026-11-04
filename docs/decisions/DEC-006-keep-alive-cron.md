@@ -8,7 +8,7 @@ Se necesita un mecanismo fiable, visible y auditable, sin permisos elevados.
 
 ## Decisión
 
-- **Endpoint interno** `GET /api/cron/keep-alive` (función serverless de Vercel en `frontend/api/cron/keep-alive.ts`), protegido por `CRON_SECRET` comparado en tiempo constante (`node:crypto` `timingSafeEqual`). Códigos: `500` sin secreto, `401` sin/erróneo header, `502` error de Supabase, `200 {"ok":true}` en éxito.
+- **Endpoint interno** `GET /api/cron/keep-alive` (función serverless de Vercel en `frontend/api/cron/keep-alive.js`), protegido por `CRON_SECRET` comparado en tiempo constante (`node:crypto` `timingSafeEqual`). Códigos: `500` sin secreto, `401` sin/erróneo header, `502` error de Supabase, `200 {"ok":true}` en éxito.
 - **Cron diario** en `frontend/vercel.json` (`schedule: "0 6 * * *"`, 06:00 UTC). Vercel inyecta `Authorization: Bearer ${CRON_SECRET}` en las invocaciones.
 - **Tabla de heartbeat `cron_runs`** (`id`, `ran_at`, `status`, `source`, `detail`), con **RLS activo únicamente en esta tabla** y solo dos políticas para el rol `anon`: `SELECT` e `INSERT` (sin `UPDATE` ni `DELETE`) → historial **append-only**.
 - **Clave pública (anon)** en todo momento; nunca `service_role`.

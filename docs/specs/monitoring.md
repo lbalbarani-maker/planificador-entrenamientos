@@ -14,7 +14,7 @@ Evitar que el proyecto de Supabase (plan Free) se pause por inactividad mediante
 ### Cron diario (producción)
 
 - `frontend/vercel.json` programa `GET /api/cron/keep-alive` con `schedule: "0 6 * * *"` (06:00 UTC, una vez al día).
-- La función serverless `frontend/api/cron/keep-alive.ts` (runtime Node, sin caché):
+- La función serverless `frontend/api/cron/keep-alive.js` (runtime Node, sin caché):
   - Sin `CRON_SECRET` configurado → `500 { ok: false }` y **no** consulta.
   - Header `Authorization` ausente o distinto de `Bearer ${CRON_SECRET}` → `401 { ok: false }` y **no** consulta. La comparación es de tiempo constante (`node:crypto` `timingSafeEqual`, con chequeo previo de longitudes).
   - Éxito → `200 { ok: true }`.

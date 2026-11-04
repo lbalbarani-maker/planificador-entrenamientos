@@ -153,7 +153,7 @@ Las tablas se añaden a la publicación realtime con `ALTER PUBLICATION supabase
 
 - **Flujo completo previsto**: usuario se suscribe (`push_subscriptions`) → admin envía desde `/admin/push` (edge `send-push`) o un gol dispara el trigger → `notifications_log` registra envíos → clics en `notification_clicks`.
 - **Estado real**: suscripción, envío, panel admin y prefs implementados; la **recepción/visualización** en el navegador depende del SW (no desplegado, ver PWA) y de la sesión Supabase Auth (no generada por el login custom).
-- **Endpoint de despertado**: cron Vercel diario a `/api/cron/keep-alive` (`frontend/api/cron/keep-alive.ts`, protegido por `CRON_SECRET`) que hace una lectura ligera (`teams`) y registra el heartbeat en `cron_runs`. La sección admin "Configuración > Mantenimiento" (`/configuracion`) muestra el estado y permite lanzarlo manualmente. Ver `docs/specs/monitoring.md` y DEC-006.
+- **Endpoint de despertado**: cron Vercel diario a `/api/cron/keep-alive` (`frontend/api/cron/keep-alive.js`, protegido por `CRON_SECRET`) que hace una lectura ligera (`teams`) y registra el heartbeat en `cron_runs`. La sección admin "Configuración > Mantenimiento" (`/configuracion`) muestra el estado y permite lanzarlo manualmente. Ver `docs/specs/monitoring.md` y DEC-006.
 
 ---
 

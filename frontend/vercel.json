@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/cron/keep-alive.ts": {
+    "api/cron/keep-alive.js": {
       "maxDuration": 10
     }
   },
