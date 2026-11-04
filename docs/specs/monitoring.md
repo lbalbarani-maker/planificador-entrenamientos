@@ -81,7 +81,7 @@ SQL de creación: `scripts/phase5-cron-heartbeat.sql` (se ejecuta manualmente en
 
 ## Estado
 
-Implementado y desplegado en producción (commit `cd82113`). Verificado el 2026-11-04: `401` sin header o con secreto incorrecto, `200 {"ok":true}` con `Bearer ${CRON_SECRET}`, y filas nuevas en `cron_runs` con `source='cron'` y `status='ok'`. La invocación autenticada equivalente a la del cron está validada; la primera ejecución programada por Vercel se comprobará en la próxima ventana diaria (06:00 UTC).
+Implementado y desplegado en producción (commits `cd82113` y `6c4dc06`). Verificado el 2026-11-04: `401` sin header o con secreto incorrecto, `200 {"ok":true}` con `Bearer ${CRON_SECRET}`, filas nuevas en `cron_runs` con `source='cron'` y `status='ok'`; `vercel crons list` confirma el schedule `0 6 * * *`, y `vercel crons run /api/cron/keep-alive` invocó el cron real con `200` y heartbeat correcto. Queda observar la primera ejecución automática en la próxima ventana diaria (06:00 UTC).
 
 ## Cómo probar en local
 
