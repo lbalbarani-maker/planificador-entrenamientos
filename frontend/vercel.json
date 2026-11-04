@@ -1,13 +1,13 @@
 {
   "functions": {
-    "api/keep-alive.js": {
+    "api/cron/keep-alive.ts": {
       "maxDuration": 10
     }
   },
   "crons": [
     {
-      "path": "/api/keep-alive",
-      "schedule": "0 12 * * *"
+      "path": "/api/cron/keep-alive",
+      "schedule": "0 6 * * *"
     }
   ],
   "buildCommand": "CI=false npm install --legacy-peer-deps && npm run build",

@@ -27,6 +27,7 @@ import MarketplaceForm from './components/Shop/Marketplace/MarketplaceForm';
 import MarketplaceDetail from './components/Shop/Marketplace/MarketplaceDetail';
 import { NotificationSettingsPage } from './pages/NotificationSettings';
 import { AdminPushPage } from './pages/AdminPush';
+import { ConfigurationPage } from './pages/Configuration';
 import { OfflineBanner } from './components/notifications/OfflineBanner';
 import { InstallPromptBanner } from './components/notifications/InstallPromptBanner';
 import UpdateBanner from './components/UpdateBanner';
@@ -133,6 +134,7 @@ function App() {
         {/* Rutas de Notificaciones */}
         <Route path="/settings/notifications" element={user ? <NotificationSettingsPage /> : <Navigate to="/login" replace />} />
         <Route path="/admin/push" element={user && hasRole(user.role, 'admin') ? <AdminPushPage /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/configuracion" element={user && hasRole(user.role, 'admin') ? <ConfigurationPage /> : <Navigate to="/dashboard" replace />} />
         
         {/* Ruta pública de lotería para jugadores */}
         <Route path="/lottery/:lotteryId/player/:playerId" element={<LotteryPublic />} />

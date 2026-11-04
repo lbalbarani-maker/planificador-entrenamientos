@@ -47,6 +47,7 @@ const Dashboard: React.FC = () => {
     if (path.startsWith('/clubs')) return 'clubs';
     if (path.startsWith('/shop')) return 'shop';
     if (path.startsWith('/users')) return 'users';
+    if (path.startsWith('/configuracion')) return 'configuracion';
     return 'home';
   };
 
@@ -156,6 +157,7 @@ const Dashboard: React.FC = () => {
     { id: 'locations', label: 'Pistas', icon: '📍', path: '/locations', roles: ['admin', 'admin_club', 'coordinador'] },
     ...(hasRole(user.role, 'admin') ? [{ id: 'clubs', label: 'Clubes', icon: '🏢', path: '/clubs' }] : []),
     ...(hasRole(user.role, 'admin') ? [{ id: 'users', label: 'Usuarios', icon: '👥', path: '/users' }] : []),
+    ...(hasRole(user.role, 'admin') ? [{ id: 'configuracion', label: 'Configuración', icon: '⚙️', path: '/configuracion' }] : []),
   ].filter(item => !item.roles || item.roles.some((role: string) => hasRole(user.role, role)));
 
   const handleRoleChange = (role: string) => {
