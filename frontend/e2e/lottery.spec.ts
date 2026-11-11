@@ -68,6 +68,9 @@ test.describe('Lotería · flujo de jugadora', () => {
     const physicalTicket = page.getByLabel('Se entrega papeleta física');
     await expect(physicalTicket).not.toBeChecked();
     await physicalTicket.check();
+    const paymentMethod = page.getByLabel('Forma de pago');
+    await expect(paymentMethod).toHaveValue('Efectivo');
+    await paymentMethod.selectOption('Bizum');
     await page.getByRole('button', { name: 'Confirmar venta' }).click();
     await expect(
       page.getByRole('heading', { name: 'Venta confirmada' }),
@@ -86,10 +89,12 @@ test.describe('Lotería · flujo de jugadora', () => {
     const purchaseCard = page.getByTestId('seller-purchase').filter({ hasText: buyer });
     await expect(purchaseCard).toBeVisible();
     await expect(purchaseCard.getByTestId('physical-ticket-delivered')).toBeVisible();
+    await expect(purchaseCard.getByText('Pago: Bizum')).toBeVisible();
 
     await page.reload();
     await expect(purchaseCard).toBeVisible();
     await expect(purchaseCard.getByTestId('physical-ticket-delivered')).toBeVisible();
+    await expect(purchaseCard.getByText('Pago: Bizum')).toBeVisible();
   });
 
   test('en móvil no hay scroll horizontal y el zoom está permitido', async ({

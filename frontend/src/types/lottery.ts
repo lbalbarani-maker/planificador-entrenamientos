@@ -162,6 +162,7 @@ export interface TicketPurchase {
   seller_name?: string;
   ticket_numbers: number[];
   physical_ticket_delivered: boolean;
+  buyer_payment_method: string;
   collection_status?: 'confirmed' | 'partial' | 'collected' | 'void';
 }
 
@@ -253,6 +254,7 @@ export interface SellerPurchase {
   voided_at?: string | null;
   ticket_numbers: number[];
   physical_ticket_delivered: boolean;
+  buyer_payment_method: string;
 }
 
 export interface SellerPageData {
@@ -279,6 +281,7 @@ export interface SaleResult {
   status: 'confirmed' | 'void';
   created_at: string;
   physical_ticket_delivered: boolean;
+  buyer_payment_method: string;
   tickets: number[];
 }
 

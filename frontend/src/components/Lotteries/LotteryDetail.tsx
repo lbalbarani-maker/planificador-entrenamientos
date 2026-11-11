@@ -11,6 +11,7 @@ import {
   splitSettlementReceived,
 } from '../../lib/lotteryAmounts';
 import { downloadCsv, printReport } from '../../lib/lotteryReport';
+import { LOTTERY_PAYMENT_METHODS } from '../../lib/lotteryPaymentMethods';
 import {
   LotteryAdminData,
   LotterySeller,
@@ -41,8 +42,6 @@ const RECON_FILTER_OPTIONS = [
   { value: 'exento', label: 'Exento' },
   { value: 'sin_obligacion', label: 'Sin obligación' },
 ];
-
-const PAYMENT_METHODS = ['Efectivo', 'Bizum', 'Transferencia', 'Otro'];
 
 const RECON_LABELS: Record<string, string> = {
   pendiente: 'Pendiente',
@@ -142,7 +141,7 @@ const LotteryDetail: React.FC = () => {
   const [collectionSeller, setCollectionSeller] = useState<LotterySeller | null>(null);
   const [collectionMode, setCollectionMode] = useState<CollectionMode>('all');
   const [collectionTickets, setCollectionTickets] = useState('');
-  const [collectionMethod, setCollectionMethod] = useState(PAYMENT_METHODS[0]);
+  const [collectionMethod, setCollectionMethod] = useState<string>(LOTTERY_PAYMENT_METHODS[0]);
   const [collectionNotes, setCollectionNotes] = useState('');
 
   const [waiverSeller, setWaiverSeller] = useState<LotterySeller | null>(null);
@@ -767,7 +766,7 @@ const LotteryDetail: React.FC = () => {
     setCollectionSeller(seller);
     setCollectionMode('all');
     setCollectionTickets(formatTicketCount(pending.tickets));
-    setCollectionMethod(PAYMENT_METHODS[0]);
+    setCollectionMethod(LOTTERY_PAYMENT_METHODS[0]);
     setCollectionNotes('');
   };
 
@@ -1801,16 +1800,17 @@ const LotteryDetail: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Forma de pago</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Forma de pago del cobro</label>
                     <select
                       value={collectionMethod}
                       onChange={(event) => setCollectionMethod(event.target.value)}
                       className="w-full p-2 border border-gray-300 rounded-lg"
                     >
-                      {PAYMENT_METHODS.map((method) => (
+                      {LOTTERY_PAYMENT_METHODS.map((method) => (
                         <option key={method} value={method}>{method}</option>
                       ))}
                     </select>
+                    <p className="text-xs text-gray-500 mt-1">Cómo te ha pagado la jugadora</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
@@ -1903,7 +1903,7 @@ const LotteryDetail: React.FC = () => {
                               <div className="text-xs text-gray-500">
                                 Lotería {money(settlementSplit.lottery)} · Club{' '}
                                 {money(settlementSplit.club)}
-                                {settlement.payment_method ? ` · ${settlement.payment_method}` : ''}
+                                {settlement.payment_method ? ` · Cobro: ${settlement.payment_method}` : ''}
                                 {settlement.notes ? ` · ${settlement.notes}` : ''}
                               </div>
                               {settlement.status === 'void' && settlement.void_reason && (

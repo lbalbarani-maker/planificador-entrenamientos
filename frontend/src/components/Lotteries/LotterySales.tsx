@@ -276,6 +276,7 @@ const LotterySales: React.FC = () => {
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Vendedor</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Números</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">P. física</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Pago comprador</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Importe</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Estado</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Acciones</th>
@@ -284,7 +285,7 @@ const LotterySales: React.FC = () => {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                       No hay ventas que mostrar
                     </td>
                   </tr>
@@ -311,6 +312,7 @@ const LotterySales: React.FC = () => {
                       <td className="px-4 py-3">
                         <PhysicalTicketBadge delivered={purchase.physical_ticket_delivered} />
                       </td>
+                      <td className="px-4 py-3">{purchase.buyer_payment_method || '-'}</td>
                       <td className="px-4 py-3 font-bold text-green-700">{money(purchase.total_amount)}</td>
                       <td className="px-4 py-3">
                         {purchase.status === 'void' ? (
@@ -378,7 +380,7 @@ const LotterySales: React.FC = () => {
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">Lotería</th>
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">Club</th>
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">Total</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-600">Forma</th>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-600">Cobro jugadora</th>
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">Estado</th>
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">Notas</th>
                     <th className="px-3 py-2 text-left font-semibold text-gray-600">Acciones</th>

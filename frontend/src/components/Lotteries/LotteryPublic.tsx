@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { lotteryApi } from '../../lib/supabaseLottery';
+import { LOTTERY_PAYMENT_METHODS } from '../../lib/lotteryPaymentMethods';
 import { ReceiptData, SaleResult, SellerPageData, Sponsor } from '../../types/lottery';
 import { useAppDialog } from '../AppDialog';
 import { PhysicalTicketBadge } from './PhysicalTicketBadge';
@@ -86,6 +87,9 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [buyerName, setBuyerName] = useState('');
   const [physicalTicketDelivered, setPhysicalTicketDelivered] = useState(false);
+  const [buyerPaymentMethod, setBuyerPaymentMethod] = useState<string>(
+    LOTTERY_PAYMENT_METHODS[0],
+  );
   const [selling, setSelling] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [saleResult, setSaleResult] = useState<SaleResult | null>(null);
@@ -187,12 +191,14 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
         selected,
         idempotencyKey,
         physicalTicketDelivered,
+        buyerPaymentMethod,
       );
       setSaleResult(result);
       setShowSaleModal(false);
       setSelected([]);
       setBuyerName('');
       setPhysicalTicketDelivered(false);
+      setBuyerPaymentMethod(LOTTERY_PAYMENT_METHODS[0]);
       setRequestId(null);
       await loadData();
     } catch (saleError) {
@@ -463,6 +469,9 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
                         {isVoid ? 'Anulada' : 'Confirmada'}
                       </span>
                       <PhysicalTicketBadge delivered={purchase.physical_ticket_delivered} />
+                      <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600">
+                        Pago: {purchase.buyer_payment_method}
+                      </span>
                       <button
                         type="button"
                         onClick={() => window.open(`/r/${purchase.token}`, '_blank')}
@@ -510,6 +519,7 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
             <button
               onClick={() => {
                 setPhysicalTicketDelivered(false);
+                setBuyerPaymentMethod(LOTTERY_PAYMENT_METHODS[0]);
                 setShowSaleModal(true);
               }}
               className="shrink-0 rounded-xl bg-sanse-blue px-6 py-3 text-base font-bold text-white hover:bg-blue-700 sm:px-8 sm:text-lg"
@@ -561,6 +571,28 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
                 />
                 Se entrega papeleta física
               </label>
+              <div>
+                <label
+                  htmlFor="buyer-payment-method"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Forma de pago
+                </label>
+                <select
+                  id="buyer-payment-method"
+                  data-testid="buyer-payment-method"
+                  value={buyerPaymentMethod}
+                  onChange={(event) => setBuyerPaymentMethod(event.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-xl text-base"
+                >
+                  {LOTTERY_PAYMENT_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">Cómo te ha pagado el comprador</p>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="submit"
