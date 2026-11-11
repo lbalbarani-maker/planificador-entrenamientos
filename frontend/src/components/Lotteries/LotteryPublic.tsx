@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { lotteryApi } from '../../lib/supabaseLottery';
 import { ReceiptData, SaleResult, SellerPageData, Sponsor } from '../../types/lottery';
 import { useAppDialog } from '../AppDialog';
+import { PhysicalTicketBadge } from './PhysicalTicketBadge';
 
 interface LotteryPublicProps {
   mode?: 'seller' | 'receipt';
@@ -84,6 +85,7 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
   const [selected, setSelected] = useState<string[]>([]);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [buyerName, setBuyerName] = useState('');
+  const [physicalTicketDelivered, setPhysicalTicketDelivered] = useState(false);
   const [selling, setSelling] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [saleResult, setSaleResult] = useState<SaleResult | null>(null);
@@ -184,11 +186,13 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
         cleanedName,
         selected,
         idempotencyKey,
+        physicalTicketDelivered,
       );
       setSaleResult(result);
       setShowSaleModal(false);
       setSelected([]);
       setBuyerName('');
+      setPhysicalTicketDelivered(false);
       setRequestId(null);
       await loadData();
     } catch (saleError) {
@@ -411,6 +415,7 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
                 return (
                   <div
                     key={purchase.id}
+                    data-testid="seller-purchase"
                     className={`rounded-xl border p-3 ${
                       isVoid
                         ? 'border-red-200 bg-red-50/60 text-gray-500'
@@ -457,6 +462,7 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
                       >
                         {isVoid ? 'Anulada' : 'Confirmada'}
                       </span>
+                      <PhysicalTicketBadge delivered={purchase.physical_ticket_delivered} />
                       <button
                         type="button"
                         onClick={() => window.open(`/r/${purchase.token}`, '_blank')}
@@ -502,7 +508,10 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
               <p className="text-2xl font-bold text-sanse-blue">{money(selectedTotal)}</p>
             </div>
             <button
-              onClick={() => setShowSaleModal(true)}
+              onClick={() => {
+                setPhysicalTicketDelivered(false);
+                setShowSaleModal(true);
+              }}
               className="shrink-0 rounded-xl bg-sanse-blue px-6 py-3 text-base font-bold text-white hover:bg-blue-700 sm:px-8 sm:text-lg"
             >
               VENDER
@@ -542,6 +551,16 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
                   required
                 />
               </div>
+              <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  data-testid="physical-ticket-checkbox"
+                  checked={physicalTicketDelivered}
+                  onChange={(event) => setPhysicalTicketDelivered(event.target.checked)}
+                  className="h-5 w-5 rounded border-gray-300 text-sanse-blue focus:ring-sanse-blue"
+                />
+                Se entrega papeleta física
+              </label>
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -744,6 +763,10 @@ const ReceiptPage: React.FC<{ token: string }> = ({ token }) => {
               <div className="flex justify-between text-gray-600">
                 <span>Vendido por</span>
                 <span className="font-bold">{seller.player_name}</span>
+              </div>
+              <div className="flex items-center justify-between text-gray-600">
+                <span>Papeleta física</span>
+                <PhysicalTicketBadge delivered={purchase.physical_ticket_delivered} />
               </div>
               <div className="border-t pt-2 flex justify-between text-lg font-bold text-sanse-blue">
                 <span>Total</span>

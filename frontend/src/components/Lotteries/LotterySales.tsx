@@ -8,6 +8,7 @@ import {
 import { LotteryAdminData, LotterySettlement } from '../../types/lottery';
 import BackButton from '../BackButton';
 import { useAppDialog } from '../AppDialog';
+import { PhysicalTicketBadge } from './PhysicalTicketBadge';
 
 const currencyFormatter = new Intl.NumberFormat('es-ES', {
   style: 'currency',
@@ -274,6 +275,7 @@ const LotterySales: React.FC = () => {
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Comprador</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Vendedor</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Números</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">P. física</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Importe</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Estado</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Acciones</th>
@@ -282,7 +284,7 @@ const LotterySales: React.FC = () => {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                       No hay ventas que mostrar
                     </td>
                   </tr>
@@ -305,6 +307,9 @@ const LotterySales: React.FC = () => {
                             </span>
                           ))}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <PhysicalTicketBadge delivered={purchase.physical_ticket_delivered} />
                       </td>
                       <td className="px-4 py-3 font-bold text-green-700">{money(purchase.total_amount)}</td>
                       <td className="px-4 py-3">

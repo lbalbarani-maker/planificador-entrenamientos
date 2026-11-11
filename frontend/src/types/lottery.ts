@@ -161,6 +161,7 @@ export interface TicketPurchase {
   voided_at?: string | null;
   seller_name?: string;
   ticket_numbers: number[];
+  physical_ticket_delivered: boolean;
   collection_status?: 'confirmed' | 'partial' | 'collected' | 'void';
 }
 
@@ -251,6 +252,7 @@ export interface SellerPurchase {
   sold_at?: string;
   voided_at?: string | null;
   ticket_numbers: number[];
+  physical_ticket_delivered: boolean;
 }
 
 export interface SellerPageData {
@@ -276,6 +278,7 @@ export interface SaleResult {
   donation_amount: number;
   status: 'confirmed' | 'void';
   created_at: string;
+  physical_ticket_delivered: boolean;
   tickets: number[];
 }
 
@@ -292,6 +295,7 @@ export interface ReceiptData {
     status: 'confirmed' | 'void';
     created_at: string;
     voided_at?: string | null;
+    physical_ticket_delivered: boolean;
   };
   lottery: Lottery;
   seller: {

@@ -65,6 +65,9 @@ test.describe('Lotería · flujo de jugadora', () => {
 
     const buyer = `E2E ${Date.now()}`;
     await page.getByLabel(/Nombre del comprador/).fill(buyer);
+    const physicalTicket = page.getByLabel('Se entrega papeleta física');
+    await expect(physicalTicket).not.toBeChecked();
+    await physicalTicket.check();
     await page.getByRole('button', { name: 'Confirmar venta' }).click();
     await expect(
       page.getByRole('heading', { name: 'Venta confirmada' }),
@@ -76,13 +79,17 @@ test.describe('Lotería · flujo de jugadora', () => {
     ]);
     await receipt.waitForLoadState('domcontentloaded');
     await expect(receipt.getByText('Recibo de compra')).toBeVisible();
+    await expect(receipt.getByTestId('physical-ticket-delivered')).toBeVisible();
     await receipt.close();
 
     await page.getByRole('button', { name: 'Seguir vendiendo' }).click();
-    await expect(page.getByText(buyer)).toBeVisible();
+    const purchaseCard = page.getByTestId('seller-purchase').filter({ hasText: buyer });
+    await expect(purchaseCard).toBeVisible();
+    await expect(purchaseCard.getByTestId('physical-ticket-delivered')).toBeVisible();
 
     await page.reload();
-    await expect(page.getByText(buyer)).toBeVisible();
+    await expect(purchaseCard).toBeVisible();
+    await expect(purchaseCard.getByTestId('physical-ticket-delivered')).toBeVisible();
   });
 
   test('en móvil no hay scroll horizontal y el zoom está permitido', async ({

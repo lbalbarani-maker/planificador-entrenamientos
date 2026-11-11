@@ -25,12 +25,14 @@ export const lotteryApi = {
     buyerName: string,
     ticketIds: string[],
     clientRequestId: string,
+    physicalTicketDelivered: boolean,
   ): Promise<SaleResult> {
     const { data, error } = await supabase.rpc('create_lottery_sale', {
       p_token: token,
       p_buyer_name: buyerName,
       p_ticket_ids: ticketIds,
       p_client_request_id: clientRequestId,
+      p_physical_ticket_delivered: physicalTicketDelivered,
     });
     if (error) rpcError(error);
     return data as SaleResult;
