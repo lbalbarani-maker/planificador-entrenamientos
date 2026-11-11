@@ -22,6 +22,7 @@
     "html2pdf.js": "^0.12.1",
     "jspdf": "^3.0.3",
     "postcss": "^8.5.6",
+    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.5",
@@ -36,7 +37,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "eslintConfig": {
     "extends": [
@@ -61,7 +65,9 @@
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/canvas-confetti": "^1.9.0",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-react": "^4.7.0",
     "baseline-browser-mapping": "^2.10.0",
     "tailwindcss": "^3.4.18",

@@ -136,9 +136,9 @@ function App() {
         <Route path="/admin/push" element={user && hasRole(user.role, 'admin') ? <AdminPushPage /> : <Navigate to="/dashboard" replace />} />
         <Route path="/configuracion" element={user && hasRole(user.role, 'admin') ? <ConfigurationPage /> : <Navigate to="/dashboard" replace />} />
         
-        {/* Ruta pública de lotería para jugadores */}
-        <Route path="/lottery/:lotteryId/player/:playerId" element={<LotteryPublic />} />
-        <Route path="/lottery/:lotteryId/buyer/:buyerId" element={<LotteryPublic />} />
+        {/* Rutas públicas de lotería */}
+        <Route path="/j/:token" element={<LotteryPublic mode="seller" />} />
+        <Route path="/r/:token" element={<LotteryPublic mode="receipt" />} />
         
         {/* Ruta por defecto */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -1,401 +1,338 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import QRCode from 'qrcode';
 import { lotteryApi } from '../../lib/supabaseLottery';
-import { supabase } from '../../lib/supabase';
-import { Lottery, TicketBlock, Ticket, Player, Sponsor } from '../../types/lottery';
+import { ReceiptData, SaleResult, SellerPageData, Sponsor } from '../../types/lottery';
+import { useAppDialog } from '../AppDialog';
 
-const LotteryPublic: React.FC = () => {
-  const { lotteryId, playerId, buyerId } = useParams<{ lotteryId: string; playerId?: string; buyerId?: string }>();
-  const [lottery, setLottery] = useState<Lottery | null>(null);
-  const [player, setPlayer] = useState<Player | null>(null);
-  const [buyerName, setBuyerName] = useState<string>('');
-  const [buyerTickets, setBuyerTickets] = useState<Ticket[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+interface LotteryPublicProps {
+  mode?: 'seller' | 'receipt';
+}
+
+function pad(value: number): string {
+  return Number(value).toString().padStart(4, '0');
+}
+
+function money(value: number | null | undefined): string {
+  return `${Number(value ?? 0).toFixed(2)}€`;
+}
+
+function formatPurchaseDate(value: string): string {
+  return new Date(value).toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function newRequestId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = (Math.random() * 16) | 0;
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+const QrCode: React.FC<{ value: string; size?: number; className?: string }> = ({
+  value,
+  size = 220,
+  className,
+}) => {
+  const [src, setSrc] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    QRCode.toDataURL(value, { width: size, margin: 1, errorCorrectionLevel: 'M' })
+      .then((url) => {
+        if (active) setSrc(url);
+      })
+      .catch(() => {
+        if (active) setSrc('');
+      });
+    return () => {
+      active = false;
+    };
+  }, [value, size]);
+
+  if (!src) return null;
+  return <img src={src} alt="Código QR" className={className} width={size} height={size} />;
+};
+
+async function shareUrl(url: string, text: string): Promise<void> {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Sanse Complutense', text, url });
+      return;
+    } catch {
+      return;
+    }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`, '_blank');
+}
+
+const SellerPage: React.FC<{ token: string }> = ({ token }) => {
+  const dialog = useAppDialog();
+  const [data, setData] = useState<SellerPageData | null>(null);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isBuyerView, setIsBuyerView] = useState(false);
-  const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
-  const [showModal, setShowModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [reservedCount, setReservedCount] = useState(0);
-  const [buyerData, setBuyerData] = useState({ name: '', phone: '', email: '' });
-  const [showAgeModal, setShowAgeModal] = useState(false);
-
-  const toggleTicket = (ticketId: string) => {
-    setSelectedTickets(prev => 
-      prev.includes(ticketId) 
-        ? prev.filter(id => id !== ticketId)
-        : [...prev, ticketId]
-    );
-  };
-
-  const handleBuySelected = () => {
-    if (selectedTickets.length > 0) {
-      setShowModal(true);
-    }
-  };
+  const [error, setError] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [buyerName, setBuyerName] = useState('');
+  const [selling, setSelling] = useState(false);
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [saleResult, setSaleResult] = useState<SaleResult | null>(null);
+  const [showQr, setShowQr] = useState(false);
+  const [bottomOffset, setBottomOffset] = useState(0);
 
   useEffect(() => {
-    if (buyerId) {
-      loadBuyerData();
-    } else if (lotteryId && playerId) {
-      loadData();
-    }
-  }, [lotteryId, playerId, buyerId]);
+    const viewport = window.visualViewport;
+    if (!viewport) return;
 
-  useEffect(() => {
-    if (isBuyerView && buyerTickets.length > 0) {
-      setShowAgeModal(true);
-    }
-  }, [isBuyerView, buyerTickets.length]);
-
-  const loadBuyerData = async () => {
-    setLoading(true);
-    try {
-      console.log('=== LOAD BUYER DATA ===');
-      const urlParams = new URLSearchParams(window.location.search);
-      const name = urlParams.get('name') || 'Comprador';
-      console.log('Buyer name:', name);
-      setBuyerName(decodeURIComponent(name));
-      setIsBuyerView(true);
-
-      const lotteryData = await lotteryApi.getLottery(lotteryId!);
-      console.log('Lottery:', lotteryData);
-      setLottery(lotteryData);
-
-      const blocks = await lotteryApi.getTicketBlocks(lotteryId!);
-      console.log('Blocks:', blocks.length);
-      
-      const allTickets: Ticket[] = [];
-      for (const block of blocks) {
-        let blockTickets = block.tickets || [];
-        
-        if (blockTickets.length === 0) {
-          blockTickets = await lotteryApi.getTicketBlockTickets(block.id);
-        }
-        
-        if (blockTickets.length === 0) {
-          await lotteryApi.generateTicketsForBlock(block);
-          blockTickets = await lotteryApi.getTicketBlockTickets(block.id);
-        }
-        
-        console.log('Block tickets:', blockTickets.length, 'player:', block.player?.full_name);
-        allTickets.push(...blockTickets);
-      }
-
-      console.log('Total tickets:', allTickets.length);
-      const buyerTicketsList = allTickets.filter(t => 
-        t.status === 'sold' && 
-        t.buyer_name?.toLowerCase() === decodeURIComponent(name).toLowerCase()
+    const updateOffset = () => {
+      const offset = Math.max(
+        0,
+        window.innerHeight - viewport.height - viewport.offsetTop,
       );
-      
-      console.log('Buyer tickets:', buyerTicketsList.length);
-      setBuyerTickets(buyerTicketsList);
+      setBottomOffset(offset);
+    };
 
-      if (lotteryData?.club_id) {
-        const { data: sponsorsData } = await supabase
-          .from('sponsors')
-          .select('*')
-          .eq('club_id', lotteryData.club_id)
-          .order('created_at');
-        if (sponsorsData) setSponsors(sponsorsData);
-      }
-    } catch (error) {
-      console.error('Error loading buyer data:', error);
-    } finally {
-      setLoading(false);
-      if (isBuyerView && buyerTickets.length > 0) {
-        setShowAgeModal(true);
-      }
-    }
-  };
+    updateOffset();
+    viewport.addEventListener('resize', updateOffset);
+    viewport.addEventListener('scroll', updateOffset);
+    return () => {
+      viewport.removeEventListener('resize', updateOffset);
+      viewport.removeEventListener('scroll', updateOffset);
+    };
+  }, []);
 
   const loadData = async () => {
     try {
-      console.log('=== LOTTERY PUBLIC DEBUG ===');
-      console.log('lotteryId:', lotteryId);
-      console.log('playerId:', playerId);
-      
-      const [lotteryData, playerData] = await Promise.all([
-        lotteryApi.getLottery(lotteryId!),
-        supabase.from('players').select('*').eq('id', playerId).single()
-      ]);
-      
-      console.log('Lottery:', lotteryData);
-      console.log('Player:', playerData.data);
-      
-      setLottery(lotteryData);
-      setPlayer(playerData.data);
-
-      if (lotteryData?.club_id) {
-        const { data: sponsorsData } = await supabase
-          .from('sponsors')
-          .select('*')
-          .eq('club_id', lotteryData.club_id)
-          .order('created_at');
-        if (sponsorsData) setSponsors(sponsorsData);
+      const result = await lotteryApi.getSellerPage(token);
+      if (!result) {
+        setError('Este enlace de vendedor no es válido o ha caducado.');
+        setData(null);
+        return;
       }
-
-      const blocks = await lotteryApi.getPlayerTicketBlocks(playerId!);
-      console.log('Blocks for player:', blocks);
-      console.log('Blocks count:', blocks.length);
-      
-      if (blocks.length > 0) {
-        const allTickets: Ticket[] = [];
-        const seenNumbers = new Set<number>();
-        
-        for (const block of blocks) {
-          console.log('Block:', block);
-          
-          if (!block.tickets || block.tickets.length === 0) {
-            console.log('Generating tickets for block...');
-            await lotteryApi.generateTicketsForBlock(block);
-          }
-          
-          const blockTickets = await lotteryApi.getTicketBlockTickets(block.id);
-          console.log('Tickets for block:', blockTickets.length);
-          
-          for (const ticket of blockTickets) {
-            if (!seenNumbers.has(ticket.number)) {
-              seenNumbers.add(ticket.number);
-              allTickets.push(ticket);
-            }
-          }
-        }
-        
-        console.log('Total unique tickets:', allTickets.length);
-        setTickets(allTickets);
-      } else {
-        console.log('No blocks found for this player');
-        setTickets([]);
+      setData(result);
+      setError('');
+      if (result.lottery.club_id) {
+        lotteryApi
+          .getSponsors(result.lottery.club_id)
+          .then(setSponsors)
+          .catch(() => setSponsors([]));
       }
-    } catch (error) {
-      console.error('Error loading data:', error);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'No se pudo cargar la lotería');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReserve = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedTickets.length === 0) return;
+  useEffect(() => {
+    setLoading(true);
+    loadData();
+  }, [token]);
+
+  const allTickets = useMemo(
+    () => data?.tacos.flatMap((taco) => taco.tickets) ?? [],
+    [data],
+  );
+  const purchases = data?.purchases ?? [];
+  const sold = allTickets.filter((ticket) => ticket.status === 'sold').length;
+  const available = allTickets.length - sold;
+  const collected = sold * Number(data?.lottery.ticket_price ?? 0);
+  const donation = sold * Number(data?.lottery.donation_per_ticket ?? 0);
+  const selectedTotal = selected.length * Number(data?.lottery.ticket_price ?? 0);
+  const shareLink = `${window.location.origin}/j/${token}`;
+  const isOpen = data?.lottery.sales_status === 'open';
+
+  const toggleTicket = (ticketId: string) => {
+    setRequestId(null);
+    setSelected((current) =>
+      current.includes(ticketId)
+        ? current.filter((id) => id !== ticketId)
+        : [...current, ticketId],
+    );
+  };
+
+  const handleSale = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!data || selected.length === 0) return;
+    const cleanedName = buyerName.trim();
+    if (!cleanedName) {
+      await dialog.alert({
+        title: 'Falta el nombre',
+        message: 'Escribe el nombre del comprador.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    setSelling(true);
+    const idempotencyKey = requestId ?? newRequestId();
+    if (!requestId) setRequestId(idempotencyKey);
 
     try {
-      for (const ticketId of selectedTickets) {
-        await lotteryApi.updateTicketStatus(ticketId, 'sold', 'pending', buyerData);
-      }
+      const result = await lotteryApi.createSale(
+        token,
+        cleanedName,
+        selected,
+        idempotencyKey,
+      );
+      setSaleResult(result);
+      setShowSaleModal(false);
+      setSelected([]);
+      setBuyerName('');
+      setRequestId(null);
       await loadData();
-      setReservedCount(selectedTickets.length);
-      setShowModal(false);
-      setShowSuccessModal(true);
-      setSelectedTickets([]);
-      setBuyerData({ name: '', phone: '', email: '' });
-    } catch (error) {
-      console.error('Error reserving tickets:', error);
-      alert('Error al reservar las papeletas');
+    } catch (saleError) {
+      await dialog.alert({
+        title: 'No se pudo completar la venta',
+        message:
+          saleError instanceof Error ? saleError.message : 'No se pudo completar la venta',
+        variant: 'danger',
+      });
+      await loadData();
+    } finally {
+      setSelling(false);
     }
+  };
+
+  const handleCopyLink = async () => {
+    if (await copyText(shareLink)) {
+      await dialog.alert({
+        title: 'Enlace copiado',
+        message: shareLink,
+        variant: 'success',
+      });
+      return;
+    }
+    await dialog.alert({
+      title: 'Copia este enlace',
+      message: (
+        <input
+          readOnly
+          value={shareLink}
+          onFocus={(event) => event.currentTarget.select()}
+          className="w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-700"
+        />
+      ),
+    });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sanse-blue to-blue-700 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-sanse-blue to-blue-700 flex items-center justify-center p-4">
         <div className="text-white text-xl">Cargando...</div>
       </div>
     );
   }
 
-  if (!lottery) {
+  if (!data) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-gray-600">Lotería no encontrada</div>
-      </div>
-    );
-  }
-
-  if (isBuyerView && buyerTickets.length === 0) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-sanse-blue to-blue-700 p-4">
-        <div className="max-w-md mx-auto">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 text-center">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Comprador no encontrado</h2>
-            <p className="text-gray-600">No se encontraron tickets asociados a este comprador.</p>
-          </div>
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl p-8 text-center shadow-xl max-w-md w-full">
+          <div className="text-4xl mb-3">🎰</div>
+          <h1 className="text-xl font-bold text-gray-800 mb-2">Enlace no válido</h1>
+          <p className="text-gray-600">{error || 'No se encontró la lotería.'}</p>
         </div>
       </div>
     );
   }
 
-  if (isBuyerView && buyerTickets.length > 0) {
-    const totalPaid = buyerTickets.length * lottery.ticket_price;
-    const donationPerTicket = 1;
-    const lotteryNumbers = lottery.lottery_number ? lottery.lottery_number.split('-').map(n => n.trim()).filter(n => n) : [];
-    const lotteryAmountPerNumber = lotteryNumbers.length > 0 ? (lottery.ticket_price - donationPerTicket) / lotteryNumbers.length : lottery.ticket_price;
-    
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-sanse-blue to-blue-700 p-4">
-        <div className="max-w-md mx-auto">
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-sanse-blue to-blue-600 p-6 text-center">
-              {lottery.club?.logo_url && (
-                <img src={lottery.club.logo_url} alt="Club" className="w-20 h-20 rounded-full mx-auto mb-3 border-4 border-white" />
-              )}
-              <h1 className="text-2xl font-bold text-white">{lottery.name}</h1>
-              <p className="text-blue-200 text-sm">Confirmación de compra</p>
-            </div>
-
-            {/* Buyer Info */}
-            <div className="p-6">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <span className="text-3xl text-green-600">✓</span>
-                </div>
-                <h2 className="text-xl font-bold text-gray-800">¡Compra Confirmada!</h2>
-                <p className="text-gray-600">Gracias por participar, {buyerName}!</p>
-              </div>
-
-              {/* Números de lotería */}
-              {lotteryNumbers.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold text-gray-800 mb-3 text-center">Mis Números</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    {lotteryNumbers.map((num, idx) => (
-                      <div key={idx} className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center border-2 border-blue-300 flex items-center justify-center">
-                        <span className="text-2xl font-bold text-blue-700">{num}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Summary */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-                <div className="flex justify-between text-gray-600">
-                  <span>Cantidad de tacos:</span>
-                  <span className="font-bold">{buyerTickets.length}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Precio por taco:</span>
-                  <span className="font-bold">{lottery.ticket_price}€</span>
-                </div>
-                <div className="border-t pt-2 flex justify-between text-lg font-bold text-sanse-blue">
-                  <span>Total pagado:</span>
-                  <span>{totalPaid}€</span>
-                </div>
-              </div>
-
-              <div className="mt-4 p-4 bg-blue-50 rounded-xl border-2 border-blue-200">
-                <div className="flex justify-between text-gray-600">
-                  <span>Lotería ({lotteryNumbers.length} números):</span>
-                  <span className="font-bold">{lotteryNumbers.length * lotteryAmountPerNumber}€</span>
-                </div>
-                <div className="flex justify-between text-gray-600 mt-2">
-                  <span>Donativo:</span>
-                  <span className="font-bold">{donationPerTicket}€</span>
-                </div>
-              </div>
-
-              <div className="mt-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
-                <p className="text-sm text-yellow-800 text-center">
-                  El portador participa con {lotteryAmountPerNumber.toFixed(2)} EUROS en cada número arriba indicado para el sorteo de la Lotería Nacional que se celebró el {lottery.draw_date ? new Date(lottery.draw_date).toLocaleDateString('es-ES') : 'próximamente'}
-                </p>
-              </div>
-
-              <div className="mt-4 p-4 bg-gray-100 rounded-xl">
-                <p className="text-xs text-gray-600 text-center">
-                  Los premios por décimo cuya cuantía sea superior a la que marque en cada momento la legislación vigente, tendrán la retención que dicha legislación disponga en la proporción correspondiente al valor nominal de estas participaciones.<br/><br/>
-                  Toda papeleta rota, deteriorada, sin numerar o enmendada será nula.<br/>
-                  Caduca a los 3 meses.
-                </p>
-              </div>
-
-              {/* Mis Talones */}
-              <div className="mt-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-3 text-center">Mis Talones</h3>
-                <div className="grid grid-cols-5 gap-2 justify-items-center">
-                  {buyerTickets.map(ticket => (
-                    <div key={ticket.id} className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-2 flex items-center justify-center border-2 border-yellow-300 w-12">
-                      <span className="text-xl font-bold text-yellow-700">
-                        {ticket.number.toString().padStart(2, '0')}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  {/* Modal +18 */}
-  {showAgeModal && (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
-        <div className="text-6xl mb-4">🎰</div>
-        <h2 className="text-3xl font-bold text-sanse-blue mb-4">+18</h2>
-        <p className="text-gray-600 mb-6">Primera regla del juego:</p>
-        <p className="text-xl font-bold text-gray-800 mb-6">¡Mucha suerte y que te toque!</p>
-        <button
-          onClick={() => setShowAgeModal(false)}
-          className="bg-sanse-blue text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 w-full"
-        >
-          ¡Participar!
-        </button>
-      </div>
-    </div>
-  )}
-
-  const availableTickets = tickets.filter(t => t.status === 'available');
-  const soldTickets = tickets.filter(t => t.status === 'sold');
-  const reservedTickets = tickets.filter(t => t.status === 'reserved');
+  const lottery = data.lottery;
+  const lotteryNumbers = [lottery.lottery_number_1, lottery.lottery_number_2].filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sanse-blue to-blue-700 p-4">
-      <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="text-center mb-6">
-          {lottery.club?.logo_url && (
-            <img src={lottery.club.logo_url} alt="Club" className="w-20 h-20 rounded-full mx-auto mb-4 object-cover" />
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-sanse-blue to-blue-700 p-3 pb-32 sm:p-4 sm:pb-28">
+      <div className="max-w-md mx-auto min-w-0">
+        <div className="text-center mb-5">
+          <img
+            src="/images/logosanse2.png"
+            alt="Sanse Complutense"
+            className="w-16 h-16 mx-auto mb-2 object-contain"
+          />
+          <h1 className="text-2xl font-bold text-white">{lottery.name}</h1>
+          <p className="text-blue-200 text-sm">Jugadora: {data.seller.player_name}</p>
+          {data.seller.team_names.length > 0 && (
+            <p className="text-blue-300 text-xs">{data.seller.team_names.join(' · ')}</p>
           )}
-          <h1 className="text-3xl font-bold text-white mb-2">{lottery.name}</h1>
-          {player && <p className="text-blue-200">Ventas por: {player.full_name}</p>}
         </div>
 
-        {/* Info */}
-        <div className="bg-white rounded-xl p-4 mb-6 shadow-lg">
-          <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="bg-white rounded-2xl p-4 shadow-lg mb-4">
+          <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
             <div>
-              <div className="text-2xl font-bold text-blue-600">{availableTickets.length}</div>
-              <div className="text-xs text-gray-500">Disponibles</div>
+              <div className="text-xl font-bold text-green-600">{sold}</div>
+              <div className="text-[10px] text-gray-500">Vendidos</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-green-600">{soldTickets.length}</div>
-              <div className="text-xs text-gray-500">Vendidas</div>
+              <div className="text-xl font-bold text-blue-600">{available}</div>
+              <div className="text-[10px] text-gray-500">Pendientes</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-yellow-600">{reservedTickets.length}</div>
-              <div className="text-xs text-gray-500">Reservadas</div>
+              <div className="text-xl font-bold text-purple-600">{money(collected)}</div>
+              <div className="text-[10px] text-gray-500">Cobrado</div>
+            </div>
+            <div>
+              <div className="text-xl font-bold text-orange-600">{money(donation)}</div>
+              <div className="text-[10px] text-gray-500">Donativo</div>
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t text-center">
-            <span className="text-3xl font-bold text-sanse-blue">{lottery.ticket_price}€</span>
-            <p className="text-sm text-gray-500">por papeleta</p>
+          <div className="mt-3 pt-3 border-t flex items-center justify-between">
+            <span className="text-lg font-bold text-sanse-blue">{money(lottery.ticket_price)} / papeleta</span>
+            {!isOpen && <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Venta cerrada</span>}
           </div>
+          <p className="mt-1 text-[11px] text-gray-500">
+            Incluye {money(lottery.donation_per_ticket)} de donativo. Las papeletas no vendidas también generan ese donativo.
+          </p>
+          {lotteryNumbers.length > 0 && (
+            <div className="mt-2 flex gap-2 justify-center">
+              {lotteryNumbers.map((number) => (
+                <span key={number} className="bg-blue-50 text-blue-700 font-bold rounded-lg px-3 py-1">
+                  {number}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Sponsors */}
+        <div className="bg-white/10 rounded-2xl p-3 mb-4 flex gap-2">
+          <button
+            onClick={handleCopyLink}
+            className="flex-1 bg-white/90 text-sanse-blue font-bold py-2 rounded-lg text-sm"
+          >
+            📋 Copiar
+          </button>
+          <button
+            onClick={() => shareUrl(shareLink, `Compra papeletas de ${lottery.name}:`)}
+            className="flex-1 bg-green-500 text-white font-bold py-2 rounded-lg text-sm"
+          >
+            WhatsApp
+          </button>
+          <button
+            onClick={() => setShowQr(true)}
+            className="flex-1 bg-white/90 text-sanse-blue font-bold py-2 rounded-lg text-sm"
+          >
+            🔳 QR
+          </button>
+        </div>
+
         {sponsors.length > 0 && (
-          <div className="bg-white/10 rounded-xl p-4 mb-6">
-            <p className="text-white text-center text-sm mb-3">Patrocinadores</p>
-            <div className="flex flex-wrap justify-center gap-4">
-              {sponsors.map(sponsor => (
-                <div key={sponsor.id} className="bg-white rounded-lg p-2">
+          <div className="bg-white/10 rounded-xl p-3 mb-4">
+            <p className="text-white text-center text-xs mb-2">Patrocinadores</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {sponsors.map((sponsor) => (
+                <div key={sponsor.id} className="bg-white rounded p-1.5">
                   {sponsor.logo_url ? (
-                    <img src={sponsor.logo_url} alt={sponsor.name} className="h-12 object-contain" />
+                    <img src={sponsor.logo_url} alt={sponsor.name} className="h-8 object-contain" />
                   ) : (
-                    <span className="text-gray-800 font-bold">{sponsor.name}</span>
+                    <span className="text-gray-800 text-xs font-bold">{sponsor.name}</span>
                   )}
                 </div>
               ))}
@@ -403,151 +340,454 @@ const LotteryPublic: React.FC = () => {
           </div>
         )}
 
-        {/* Tickets Grid - Butacas de cine */}
-        <div className="bg-white rounded-xl p-4 shadow-lg mb-4">
-          <h2 className="text-lg font-bold mb-4 text-center">Selecciona tus números</h2>
-          
-          <div className="grid grid-cols-5 gap-2">
-            {tickets.map(ticket => {
-              const isSelected = selectedTickets.includes(ticket.id);
-              return (
-                <button
-                  key={ticket.id}
-                  onClick={() => {
-                    if (ticket.status === 'available') {
-                      toggleTicket(ticket.id);
-                    }
-                  }}
-                  disabled={ticket.status !== 'available'}
-                  className={`py-3 px-1 rounded-lg text-sm font-bold transition-all transform hover:scale-105 ${
-                    ticket.status === 'available'
-                      ? isSelected
-                        ? 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300'
-                        : 'bg-green-100 text-green-700 hover:bg-green-200 border-2 border-green-200'
-                      : ticket.status === 'reserved'
-                      ? 'bg-yellow-100 text-yellow-700 cursor-not-allowed opacity-70'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {ticket.number.toString().padStart(2, '0')}
-                </button>
-              );
-            })}
+        {selected.length > 0 && isOpen && (
+          <div className="sticky top-0 z-30 mb-3 flex items-center justify-between gap-2 rounded-xl border border-white/60 bg-white/95 px-3 py-2 text-sm shadow-md backdrop-blur">
+            <span className="font-semibold text-sanse-blue">
+              {selected.length} seleccionada{selected.length === 1 ? '' : 's'}
+            </span>
+            <span className="font-bold text-sanse-blue">{money(selectedTotal)}</span>
           </div>
-          
-          {selectedTickets.length > 0 && (
-            <div className="mt-4 pt-4 border-t text-center">
-              <p className="text-lg font-bold text-sanse-blue mb-2">
-                {selectedTickets.length} papeletas seleccionadas
-              </p>
-              <button
-                onClick={handleBuySelected}
-                className="bg-sanse-blue text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700"
+        )}
+
+        <div className="space-y-4">
+          {data.tacos.map((taco) => (
+            <div key={taco.id} className="bg-white rounded-2xl p-4 shadow-lg">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="font-bold text-gray-800">Taco {taco.block_number}</h2>
+                <span className="text-xs text-gray-500 font-mono">
+                  {pad(taco.start_number)} - {pad(taco.end_number)}
+                </span>
+              </div>
+              <div
+                data-testid="ticket-grid"
+                className="grid grid-cols-4 gap-1.5 min-[380px]:gap-2 sm:grid-cols-5"
               >
-                Comprar {selectedTickets.length} papeletas ({selectedTickets.length * lottery.ticket_price}€)
-              </button>
+                {taco.tickets.map((ticket) => {
+                  const isSelected = selected.includes(ticket.id);
+                  const isSold = ticket.status === 'sold';
+                  return (
+                    <button
+                      key={ticket.id}
+                      data-testid={`ticket-${ticket.number}`}
+                      data-status={ticket.status}
+                      onClick={() => {
+                        if (!isSold && isOpen) toggleTicket(ticket.id);
+                      }}
+                      disabled={isSold || !isOpen}
+                      className={`min-w-0 py-2 rounded-lg text-[11px] font-bold transition-colors sm:py-2.5 sm:text-xs ${
+                        isSold
+                          ? 'bg-red-100 text-red-500 cursor-not-allowed'
+                          : isSelected
+                            ? 'bg-yellow-400 text-yellow-900 ring-2 ring-yellow-200'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                      }`}
+                    >
+                      {pad(ticket.number)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 bg-white rounded-2xl p-4 shadow-lg">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="font-bold text-gray-800">Historial de ventas</h2>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200"
+            >
+              Actualizar
+            </button>
+          </div>
+          {purchases.length === 0 ? (
+            <p className="text-sm text-gray-500">Todavía no hay ventas registradas.</p>
+          ) : (
+            <div className="space-y-2">
+              {purchases.map((purchase) => {
+                const isVoid = purchase.status === 'void';
+                return (
+                  <div
+                    key={purchase.id}
+                    className={`rounded-xl border p-3 ${
+                      isVoid
+                        ? 'border-red-200 bg-red-50/60 text-gray-500'
+                        : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-800">
+                          {purchase.buyer_name}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          {formatPurchaseDate(purchase.created_at)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-800">
+                          {money(purchase.total_amount)}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          {purchase.quantity} papeleta{purchase.quantity === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {purchase.ticket_numbers.map((number) => (
+                        <span
+                          key={number}
+                          className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-gray-700 ring-1 ring-gray-200"
+                        >
+                          {pad(number)}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+                          isVoid
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {isVoid ? 'Anulada' : 'Confirmada'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => window.open(`/r/${purchase.token}`, '_blank')}
+                        className="rounded-lg bg-sanse-blue px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700"
+                      >
+                        Ver recibo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          shareUrl(
+                            `${window.location.origin}/r/${purchase.token}`,
+                            `Recibo de ${purchase.buyer_name}:`,
+                          )
+                        }
+                        className="rounded-lg bg-green-500 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-green-600"
+                      >
+                        Compartir recibo
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Legend */}
-        <div className="mt-4 flex justify-center gap-4 text-white text-sm">
-          <span className="flex items-center gap-1"><span className="w-4 h-4 bg-green-400 rounded"></span> Disponible</span>
-          <span className="flex items-center gap-1"><span className="w-4 h-4 bg-yellow-400 rounded"></span> Reservada</span>
-          <span className="flex items-center gap-1"><span className="w-4 h-4 bg-gray-400 rounded"></span> Vendida</span>
+        <div className="mt-4 flex justify-center gap-4 text-white text-xs">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-300 rounded" /> Disponible</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 rounded" /> Seleccionada</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 rounded" /> Vendida</span>
         </div>
+      </div>
 
-        {/* Modal compra */}
-        {showModal && selectedTickets.length > 0 && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-sm w-full">
-              <h3 className="text-xl font-bold mb-4 text-center">
-                Comprar {selectedTickets.length} papeletas
-              </h3>
-              <p className="text-center text-gray-600 mb-4">
-                Números: {selectedTickets.map(id => tickets.find(t => t.id === id)?.number).filter(n => n !== undefined).sort((a, b) => (a || 0) - (b || 0)).map(n => n?.toString().padStart(2, '0')).join(', ')}
-              </p>
-              <p className="text-center text-2xl font-bold text-sanse-blue mb-4">
-                Total: {selectedTickets.length * lottery.ticket_price}€
-              </p>
-              
-              <form onSubmit={handleReserve} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
-                  <input
-                    type="text"
-                    value={buyerData.name}
-                    onChange={(e) => setBuyerData({ ...buyerData, name: e.target.value })}
-                    className="w-full p-2 border border-gray-300 rounded-lg"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-                  <input
-                    type="tel"
-                    value={buyerData.phone}
-                    onChange={(e) => setBuyerData({ ...buyerData, phone: e.target.value })}
-                    className="w-full p-2 border border-gray-300 rounded-lg"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={buyerData.email}
-                    onChange={(e) => setBuyerData({ ...buyerData, email: e.target.value })}
-                    className="w-full p-2 border border-gray-300 rounded-lg"
-                    required
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700"
-                  >
-                    Reservar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowModal(false); setSelectedTickets([]); }}
-                    className="bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
+      {selected.length > 0 && isOpen && (
+        <div
+          className="fixed left-0 right-0 z-40 border-t bg-white p-3 shadow-2xl sm:p-4"
+          style={{ bottom: bottomOffset }}
+        >
+          <div className="max-w-md mx-auto flex items-center justify-between gap-3 pb-[env(safe-area-inset-bottom)]">
+            <div className="min-w-0">
+              <p className="text-sm text-gray-500">{selected.length} papeleta(s)</p>
+              <p className="text-2xl font-bold text-sanse-blue">{money(selectedTotal)}</p>
             </div>
+            <button
+              onClick={() => setShowSaleModal(true)}
+              className="shrink-0 rounded-xl bg-sanse-blue px-6 py-3 text-base font-bold text-white hover:bg-blue-700 sm:px-8 sm:text-lg"
+            >
+              VENDER
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Modal confirmación éxito */}
-        {showSuccessModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-sm w-full text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">✓</span>
+      {showSaleModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full">
+            <h3 className="text-xl font-bold text-center mb-1">Confirmar venta</h3>
+            <p className="text-center text-gray-500 text-sm mb-4">
+              {selected.length} papeleta(s) · {money(selectedTotal)}
+            </p>
+            <div className="flex flex-wrap justify-center gap-1 mb-4 max-h-24 overflow-y-auto">
+              {selected
+                .map((id) => allTickets.find((ticket) => ticket.id === id)?.number)
+                .filter((number): number is number => number !== undefined)
+                .sort((a, b) => a - b)
+                .map((number) => (
+                  <span key={number} className="bg-yellow-100 text-yellow-800 text-xs font-mono px-2 py-1 rounded">
+                    {pad(number)}
+                  </span>
+                ))}
+            </div>
+            <form onSubmit={handleSale} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del comprador *</label>
+                <input
+                  type="text"
+                  value={buyerName}
+                  onChange={(event) => setBuyerName(event.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-xl text-lg"
+                  maxLength={100}
+                  autoFocus
+                  required
+                />
               </div>
-              <h3 className="text-xl font-bold mb-2">¡Reserva Confirmada!</h3>
-              <p className="text-gray-600 mb-4">
-                ¡{reservedCount} papeletas reservadas correctamente!
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                Te contactaremos pronto para confirmar el pago.
-              </p>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={selling}
+                  className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 disabled:opacity-50"
+                >
+                  {selling ? 'Vendiendo...' : 'Confirmar venta'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSaleModal(false)}
+                  className="bg-gray-400 text-white py-3 px-4 rounded-xl font-bold hover:bg-gray-500"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {saleResult && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center">
+            <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-3xl text-green-600">✓</span>
+            </div>
+            <h3 className="text-xl font-bold mb-1">Venta confirmada</h3>
+            <p className="text-gray-600 mb-3">
+              {saleResult.buyer_name} · {saleResult.quantity} papeleta(s) · {money(saleResult.total_amount)}
+            </p>
+            <QrCode value={`${window.location.origin}/r/${saleResult.token}`} size={180} className="mx-auto rounded-lg" />
+            <div className="flex flex-wrap gap-2 mt-4">
               <button
-                onClick={() => { setShowSuccessModal(false); loadData(); }}
-                className="bg-sanse-blue text-white py-2 px-6 rounded-lg hover:bg-blue-700 w-full"
+                onClick={() =>
+                  shareUrl(
+                    `${window.location.origin}/r/${saleResult.token}`,
+                    `Recibo de ${saleResult.buyer_name}:`,
+                  )
+                }
+                className="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-sm"
               >
-                Aceptar
+                Compartir recibo
+              </button>
+              <button
+                onClick={() => window.open(`/r/${saleResult.token}`, '_blank')}
+                className="flex-1 bg-sanse-blue text-white py-2 rounded-lg font-bold text-sm"
+              >
+                Ver recibo
               </button>
             </div>
+            <button
+              onClick={() => setSaleResult(null)}
+              className="mt-3 w-full bg-gray-100 text-gray-700 py-2 rounded-lg font-medium"
+            >
+              Seguir vendiendo
+            </button>
           </div>
-        )}
+        </div>
+      )}
+
+      {showQr && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center">
+            <h3 className="text-xl font-bold mb-3">Comparte tu enlace</h3>
+            <QrCode value={shareLink} size={240} className="mx-auto rounded-lg" />
+            <p className="text-xs text-gray-500 break-all mt-3">{shareLink}</p>
+            <button
+              onClick={() => setShowQr(false)}
+              className="mt-4 w-full bg-sanse-blue text-white py-2 rounded-lg font-bold"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const ReceiptPage: React.FC<{ token: string }> = ({ token }) => {
+  const [data, setData] = useState<ReceiptData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    lotteryApi
+      .getReceipt(token)
+      .then((result) => {
+        if (!active) return;
+        if (!result) {
+          setError('Este recibo no es válido.');
+          setData(null);
+          return;
+        }
+        setData(result);
+      })
+      .catch((loadError) => {
+        if (!active) return;
+        setError(loadError instanceof Error ? loadError.message : 'No se pudo cargar el recibo');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-sanse-blue to-blue-700 flex items-center justify-center p-4">
+        <div className="text-white text-xl">Cargando recibo...</div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl p-8 text-center shadow-xl max-w-md w-full">
+          <h1 className="text-xl font-bold text-gray-800 mb-2">Recibo no encontrado</h1>
+          <p className="text-gray-600">{error || 'Comprueba el enlace.'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { purchase, lottery, seller, tickets } = data;
+  const lotteryNumbers = [lottery.lottery_number_1, lottery.lottery_number_2].filter(Boolean);
+  const isVoid = purchase.status === 'void';
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-sanse-blue to-blue-700 p-4">
+      <div className="max-w-md mx-auto">
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-sanse-blue to-blue-600 p-6 text-center">
+            <img
+              src="/images/logosanse2.png"
+              alt="Sanse Complutense"
+              className="w-16 h-16 mx-auto mb-2 object-contain"
+            />
+            <h1 className="text-2xl font-bold text-white">{lottery.name}</h1>
+            <p className="text-blue-200 text-sm">Recibo de compra</p>
+          </div>
+
+          <div className="p-5">
+            {isVoid ? (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-center mb-4">
+                <p className="font-bold text-lg">VENTA ANULADA</p>
+                <p className="text-sm">Este recibo ya no es válido.</p>
+              </div>
+            ) : (
+              <div className="text-center mb-4">
+                <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span className="text-3xl text-green-600">✓</span>
+                </div>
+                <h2 className="text-xl font-bold text-gray-800">¡Compra confirmada!</h2>
+                <p className="text-gray-600">Gracias, {purchase.buyer_name}</p>
+              </div>
+            )}
+
+            {lotteryNumbers.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-gray-700 mb-2 text-center">Números de lotería</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {lotteryNumbers.map((number) => (
+                    <div key={number} className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                      <span className="text-xl font-bold text-blue-700">{number}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+              <div className="flex justify-between text-gray-600">
+                <span>Papeletas</span>
+                <span className="font-bold">{purchase.quantity}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Precio unitario</span>
+                <span className="font-bold">{money(purchase.unit_price)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Donativo</span>
+                <span className="font-bold">{money(purchase.donation_amount)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Vendido por</span>
+                <span className="font-bold">{seller.player_name}</span>
+              </div>
+              <div className="border-t pt-2 flex justify-between text-lg font-bold text-sanse-blue">
+                <span>Total</span>
+                <span>{money(purchase.total_amount)}</span>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <h3 className="text-sm font-bold text-gray-700 mb-2 text-center">Tus números</h3>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                {tickets.map((number) => (
+                  <div key={number} className="bg-yellow-50 border border-yellow-300 rounded-lg p-2 text-center">
+                    <span className="text-sm font-bold text-yellow-800 font-mono">{pad(number)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800 text-center">
+              El portador participa con {money(purchase.unit_price - purchase.donation_per_ticket)} por papeleta en cada número indicado para el sorteo de {lottery.draw_date ? new Date(lottery.draw_date).toLocaleDateString('es-ES') : 'la Lotería Nacional'}.
+            </div>
+
+            <div className="mt-3 bg-gray-100 rounded-xl p-3 text-[10px] text-gray-600 text-center leading-relaxed">
+              Los premios superiores al límite legal tendrán la retención correspondiente.
+              Toda papeleta rota, deteriorada, sin numerar o enmendada será nula. Caduca a los 3 meses.
+            </div>
+
+          </div>
+        </div>
       </div>
     </div>
   );
+};
+
+const LotteryPublic: React.FC<LotteryPublicProps> = ({ mode = 'seller' }) => {
+  const { token } = useParams<{ token: string }>();
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="text-gray-600">Enlace no válido</div>
+      </div>
+    );
+  }
+  return mode === 'receipt' ? <ReceiptPage token={token} /> : <SellerPage token={token} />;
 };
 
 export default LotteryPublic;

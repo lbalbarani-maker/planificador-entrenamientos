@@ -1,1 +1,4 @@
 .aider*
+.vercel
+backups/
+supabase/.temp/

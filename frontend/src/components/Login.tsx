@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usersApi } from '../lib/supabaseUsers';
+import { clearLotteryAdminSession, requestLotteryAdminSession } from '../lib/lotteryAdmin';
 import { supabase } from '../lib/supabase';
 
 const Login: React.FC = () => {
@@ -39,6 +40,7 @@ const Login: React.FC = () => {
       const user = await usersApi.loginUser(email, password);
       
       if (user) {
+        await requestAdminSession(user, { email, password });
         setLoggedInUser(user);
         
         if (!user.pin) {
@@ -90,6 +92,7 @@ const Login: React.FC = () => {
     try {
       const pinHash = simpleHash(pin);
       await usersApi.updateUser(loggedInUser.id, { pin: pinHash });
+      await requestAdminSession(loggedInUser, { email, password });
       
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', email);
@@ -126,6 +129,7 @@ const Login: React.FC = () => {
     if (step === 'pin' && !loggedInUser) {
       const user = await usersApi.loginWithPin(email, pin);
       if (user) {
+        await requestAdminSession(user, { email, pin });
         localStorage.setItem('user', JSON.stringify({
           id: user.id,
           email: user.email,
@@ -146,6 +150,7 @@ const Login: React.FC = () => {
     if (!loggedInUser) {
       const user = await usersApi.loginUser(email, password);
       if (user && user.pin === simpleHash(pin)) {
+        await requestAdminSession(user, { email, password });
         if (rememberMe) {
           const usersWithPin = JSON.parse(localStorage.getItem('usersWithPin') || '[]');
           if (!usersWithPin.includes(email)) {
@@ -167,6 +172,7 @@ const Login: React.FC = () => {
         setError('PIN incorrecto');
       }
     } else if (loggedInUser.pin === simpleHash(pin)) {
+      await requestAdminSession(loggedInUser, { email, pin });
       localStorage.setItem('user', JSON.stringify({
         id: loggedInUser.id,
         email: loggedInUser.email,
@@ -201,6 +207,21 @@ const Login: React.FC = () => {
       hash = hash & hash;
     }
     return Math.abs(hash).toString(16);
+  };
+
+  const requestAdminSession = async (
+    user: any,
+    credentials: { email: string; password?: string; pin?: string },
+  ) => {
+    const isAdmin =
+      user?.is_super_admin ||
+      user?.is_club_admin ||
+      String(user?.role ?? '').split(',').includes('admin');
+    if (!isAdmin) {
+      clearLotteryAdminSession();
+      return;
+    }
+    await requestLotteryAdminSession(credentials);
   };
 
   const linkPlayerToSession = async (userId: string, role: string) => {

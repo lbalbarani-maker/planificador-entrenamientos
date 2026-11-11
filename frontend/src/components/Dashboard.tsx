@@ -15,6 +15,7 @@ import MyConvocations from './MyConvocations';
 import { eventsApi, teamsApi, convocationApi } from '../lib/supabaseTeams';
 import { Event, Team, Player } from '../types/teams';
 import { supabase } from '../lib/supabase';
+import { clearLotteryAdminSession } from '../lib/lotteryAdmin';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useRolePermissions } from '../hooks/useRolePermissions';
 import {
@@ -123,6 +124,7 @@ const Dashboard: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('user');
+    clearLotteryAdminSession();
     window.location.href = '/login';
   };
 

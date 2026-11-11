@@ -3,11 +3,12 @@ import ReactDOM from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 
 import App from './App'
+import { AppDialogProvider } from './components/AppDialog'
 import './index.css'
 
 const updateSW = registerSW({
   onNeedRefresh() {
-    if (confirm('Nueva versión disponible. ¿Actualizar ahora?')) {
+    if (window.confirm('Nueva versión disponible. ¿Actualizar ahora?')) {
       updateSW(true)
     }
   },
@@ -27,7 +28,9 @@ const root = document.getElementById('root')
 if (root) {
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
-      <App />
+      <AppDialogProvider>
+        <App />
+      </AppDialogProvider>
     </React.StrictMode>
   )
 }

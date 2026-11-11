@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 
 declare global {
   interface Window {
@@ -16,6 +17,15 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function InstallPromptBanner() {
+  const { pathname } = useLocation()
+  const isPublicLottery = pathname.startsWith('/j/') || pathname.startsWith('/r/')
+
+  if (isPublicLottery) return null
+
+  return <InstallPromptBannerContent />
+}
+
+function InstallPromptBannerContent() {
   const [isVisible, setIsVisible] = useState(false)
   const [isInstalled, setIsInstalled] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
