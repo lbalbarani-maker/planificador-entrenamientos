@@ -21,6 +21,7 @@ import {
 } from '../../types/lottery';
 import BackButton from '../BackButton';
 import { useAppDialog } from '../AppDialog';
+import DelegatesModal from './DelegatesModal';
 
 const currencyFormatter = new Intl.NumberFormat('es-ES', {
   style: 'currency',
@@ -129,6 +130,7 @@ const LotteryDetail: React.FC = () => {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showDelegatesModal, setShowDelegatesModal] = useState(false);
   const [assignBlock, setAssignBlock] = useState<TicketBlock | null>(null);
   const [assignPlayerId, setAssignPlayerId] = useState('');
   const [showAllBlocks, setShowAllBlocks] = useState(false);
@@ -1117,6 +1119,12 @@ const LotteryDetail: React.FC = () => {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => setShowDelegatesModal(true)}
+              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50"
+            >
+              Delegados
+            </button>
+            <button
               onClick={() => {
                 setReportMode('filtered');
                 setShowReport(true);
@@ -1607,6 +1615,14 @@ const LotteryDetail: React.FC = () => {
           </div>
         </div>
 
+        {showDelegatesModal && (
+          <DelegatesModal
+            lotteryId={lottery.id}
+            lotteryName={lottery.name}
+            onClose={() => setShowDelegatesModal(false)}
+          />
+        )}
+
         {showAssignModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 max-w-md w-full">
@@ -1895,6 +1911,12 @@ const LotteryDetail: React.FC = () => {
                                 </span>
                                 {settlement.status === 'void' && (
                                   <span className="ml-2 text-xs px-2 py-0.5 rounded bg-red-100 text-red-700">Anulado</span>
+                                )}
+                                {settlement.created_via === 'delegate' && (
+                                  <span className="ml-2 text-xs px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                                    Delegado
+                                    {settlement.delegate_team_name ? ` · ${settlement.delegate_team_name}` : ''}
+                                  </span>
                                 )}
                                 {settlement.treasurer_delivery_id && settlement.status !== 'void' && (
                                   <span className="ml-2 text-xs px-2 py-0.5 rounded bg-teal-100 text-teal-700">En remesa</span>

@@ -219,6 +219,21 @@ async function getLottery(client, lotteryId) {
     ),
   ]);
 
+  const delegateTeamIds = Array.from(
+    new Set(settlements.map((settlement) => settlement.delegate_team_id).filter(Boolean)),
+  );
+  const delegateTeamNames = new Map();
+  if (delegateTeamIds.length > 0) {
+    const { data: delegateTeams, error: delegateTeamsError } = await client
+      .from('teams')
+      .select('id,name')
+      .in('id', delegateTeamIds);
+    if (delegateTeamsError) throw delegateTeamsError;
+    for (const team of delegateTeams ?? []) {
+      delegateTeamNames.set(team.id, team.name);
+    }
+  }
+
   const playerIds = players.map((player) => player.id);
   let teamRows = [];
   if (playerIds.length > 0) {
@@ -428,6 +443,9 @@ async function getLottery(client, lotteryId) {
   const settlementsWithNames = settlements.map((settlement) => ({
     ...settlement,
     player_name: playerName.get(settlement.player_id) ?? 'Jugador',
+    delegate_team_name: settlement.delegate_team_id
+      ? delegateTeamNames.get(settlement.delegate_team_id) ?? null
+      : null,
     treasurer_delivered_at:
       settlement.treasurer_delivery_id &&
       deliveryById.get(settlement.treasurer_delivery_id)?.status === 'confirmed'
@@ -628,6 +646,14 @@ async function handleAction(client, admin, body) {
     });
     if (error) throw error;
     return { result: data };
+  }
+
+  if (action === 'delegate-links') {
+    const { data, error } = await client.rpc('admin_get_lottery_delegate_links', {
+      p_lottery_id: body.lotteryId,
+    });
+    if (error) throw error;
+    return data;
   }
 
   if (action === 'register-collection') {

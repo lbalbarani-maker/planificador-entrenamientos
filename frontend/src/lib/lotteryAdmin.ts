@@ -1,4 +1,5 @@
 import {
+  DelegateLinksResult,
   Lottery,
   LotteryAdminData,
   CreateLotteryInput,
@@ -181,6 +182,10 @@ export const lotteryAdminApi = {
 
   async annulSale(purchaseId: string): Promise<void> {
     await adminRequest('annul-sale', { purchaseId });
+  },
+
+  async getDelegateLinks(lotteryId: string): Promise<DelegateLinksResult> {
+    return adminRequest<DelegateLinksResult>('delegate-links', { lotteryId });
   },
 
   async registerCollection(input: {

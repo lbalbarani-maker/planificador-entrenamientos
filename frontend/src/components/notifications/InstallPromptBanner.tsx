@@ -18,7 +18,8 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function InstallPromptBanner() {
   const { pathname } = useLocation()
-  const isPublicLottery = pathname.startsWith('/j/') || pathname.startsWith('/r/')
+  const isPublicLottery =
+    pathname.startsWith('/j/') || pathname.startsWith('/d/') || pathname.startsWith('/r/')
 
   if (isPublicLottery) return null
 

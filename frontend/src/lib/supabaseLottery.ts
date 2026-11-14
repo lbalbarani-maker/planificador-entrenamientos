@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import {
   DashboardLotteryStats,
+  DelegateCollectionResult,
+  DelegatePageData,
   LotteryRanking,
   LotteryTeamRanking,
   ReceiptData,
@@ -38,6 +40,32 @@ export const lotteryApi = {
     });
     if (error) rpcError(error);
     return data as SaleResult;
+  },
+
+  async getDelegatePage(token: string): Promise<DelegatePageData | null> {
+    const { data, error } = await supabase.rpc('get_lottery_delegate', { p_token: token });
+    if (error) rpcError(error);
+    return (data as DelegatePageData | null) ?? null;
+  },
+
+  async registerDelegateCollection(
+    token: string,
+    playerId: string,
+    lotteryReceived: number,
+    clubReceived: number,
+    paymentMethod: string,
+    notes: string,
+  ): Promise<DelegateCollectionResult> {
+    const { data, error } = await supabase.rpc('create_lottery_delegate_collection', {
+      p_token: token,
+      p_player_id: playerId,
+      p_lottery_received: lotteryReceived,
+      p_club_received: clubReceived,
+      p_payment_method: paymentMethod || null,
+      p_notes: notes || null,
+    });
+    if (error) rpcError(error);
+    return data as DelegateCollectionResult;
   },
 
   async getReceipt(token: string): Promise<ReceiptData | null> {

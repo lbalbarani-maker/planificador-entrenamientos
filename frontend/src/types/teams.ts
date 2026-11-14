@@ -44,6 +44,7 @@ export interface TeamPlayer {
   shirt_number?: number;
   position?: string;
   is_active: boolean;
+  is_primary?: boolean;
   created_at: string;
   player?: Player;
 }

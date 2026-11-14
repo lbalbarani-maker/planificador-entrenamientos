@@ -195,6 +195,9 @@ export interface LotterySettlement {
   settled_by?: string | null;
   created_at: string;
   player_name?: string;
+  created_via?: 'admin' | 'delegate';
+  delegate_team_id?: string | null;
+  delegate_team_name?: string | null;
 }
 
 export interface LotteryTreasurerDelivery {
@@ -267,6 +270,64 @@ export interface SellerPageData {
   };
   tacos: SellerTaco[];
   purchases: SellerPurchase[];
+}
+
+export interface DelegatePlayer {
+  player_id: string;
+  player_name: string;
+  tickets_assigned: number;
+  tickets_sold: number;
+  tickets_unsold: number;
+  lottery_expected: number;
+  club_expected: number;
+  expected: number;
+  lottery_received: number;
+  club_received: number;
+  delivered: number;
+  waived_amount: number;
+  due_amount: number;
+  pending_amount: number;
+  pending_lottery: number;
+  pending_club: number;
+}
+
+export interface DelegatePageData {
+  lottery: Lottery;
+  delegate: {
+    team_id: string;
+    team_name: string;
+    token: string;
+  };
+  players: DelegatePlayer[];
+}
+
+export interface DelegateCollectionResult {
+  ok: boolean;
+  settlement_id: string;
+  expected_amount: number;
+  delivered_total: number;
+  difference: number;
+  tickets_sold: number;
+  tickets_assigned: number;
+  tickets_unsold: number;
+  lottery_expected: number;
+  club_expected: number;
+  lottery_received: number;
+  club_received: number;
+  sales_received: number;
+  donation_received: number;
+  player: DelegatePlayer;
+}
+
+export interface DelegateTeamLink {
+  team_id: string;
+  team_name: string;
+  player_count: number;
+  token: string;
+}
+
+export interface DelegateLinksResult {
+  teams: DelegateTeamLink[];
 }
 
 export interface SaleResult {

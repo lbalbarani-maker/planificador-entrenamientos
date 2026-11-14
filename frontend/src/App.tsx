@@ -19,6 +19,7 @@ import PlayersList from './components/Players/PlayersList';
 import LotteriesList from './components/Lotteries/LotteriesList';
 import LotteryDetail from './components/Lotteries/LotteryDetail';
 import LotterySales from './components/Lotteries/LotterySales';
+import LotteryDelegate from './components/Lotteries/LotteryDelegate';
 import LotteryPublic from './components/Lotteries/LotteryPublic';
 import TournamentsList from './components/Tournaments/TournamentsList';
 import TournamentDetail from './components/Tournaments/TournamentDetail';
@@ -138,6 +139,7 @@ function App() {
         
         {/* Rutas públicas de lotería */}
         <Route path="/j/:token" element={<LotteryPublic mode="seller" />} />
+        <Route path="/d/:token" element={<LotteryDelegate />} />
         <Route path="/r/:token" element={<LotteryPublic mode="receipt" />} />
         
         {/* Ruta por defecto */}
