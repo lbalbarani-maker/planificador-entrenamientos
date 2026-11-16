@@ -3,6 +3,7 @@ import {
   Lottery,
   LotteryAdminData,
   CreateLotteryInput,
+  TreasurerAccess,
 } from '../types/lottery';
 
 const TOKEN_KEY = 'lotteryAdminToken';
@@ -186,6 +187,18 @@ export const lotteryAdminApi = {
 
   async getDelegateLinks(lotteryId: string): Promise<DelegateLinksResult> {
     return adminRequest<DelegateLinksResult>('delegate-links', { lotteryId });
+  },
+
+  async getTreasurerAccess(lotteryId: string): Promise<TreasurerAccess> {
+    return adminRequest<TreasurerAccess>('treasurer-access', { lotteryId });
+  },
+
+  async setTreasurerPin(lotteryId: string, pin: string): Promise<TreasurerAccess> {
+    return adminRequest<TreasurerAccess>('set-treasurer-pin', { lotteryId, pin });
+  },
+
+  async clearTreasurerPin(lotteryId: string): Promise<TreasurerAccess> {
+    return adminRequest<TreasurerAccess>('clear-treasurer-pin', { lotteryId });
   },
 
   async registerCollection(input: {

@@ -19,7 +19,10 @@ interface BeforeInstallPromptEvent extends Event {
 export function InstallPromptBanner() {
   const { pathname } = useLocation()
   const isPublicLottery =
-    pathname.startsWith('/j/') || pathname.startsWith('/d/') || pathname.startsWith('/r/')
+    pathname.startsWith('/j/') ||
+    pathname.startsWith('/d/') ||
+    pathname.startsWith('/t/') ||
+    pathname.startsWith('/r/')
 
   if (isPublicLottery) return null
 
@@ -78,7 +81,7 @@ function InstallPromptBannerContent() {
   }, [checkInstallStatus, deferredPrompt])
 
   useEffect(() => {
-    const dismissed = localStorage.getItem('installBannerDismissed')
+    localStorage.getItem('installBannerDismissed')
     if (!checkInstallStatus() && (deferredPrompt || isIOS)) {
       const timer = setTimeout(() => setIsVisible(true), 2000)
       return () => clearTimeout(timer)

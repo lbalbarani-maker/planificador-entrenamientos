@@ -22,6 +22,7 @@ import {
 import BackButton from '../BackButton';
 import { useAppDialog } from '../AppDialog';
 import DelegatesModal from './DelegatesModal';
+import TreasurerModal from './TreasurerModal';
 
 const currencyFormatter = new Intl.NumberFormat('es-ES', {
   style: 'currency',
@@ -131,6 +132,7 @@ const LotteryDetail: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showDelegatesModal, setShowDelegatesModal] = useState(false);
+  const [showTreasurerModal, setShowTreasurerModal] = useState(false);
   const [assignBlock, setAssignBlock] = useState<TicketBlock | null>(null);
   const [assignPlayerId, setAssignPlayerId] = useState('');
   const [showAllBlocks, setShowAllBlocks] = useState(false);
@@ -1125,6 +1127,12 @@ const LotteryDetail: React.FC = () => {
               Delegados
             </button>
             <button
+              onClick={() => setShowTreasurerModal(true)}
+              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50"
+            >
+              Tesorero
+            </button>
+            <button
               onClick={() => {
                 setReportMode('filtered');
                 setShowReport(true);
@@ -1620,6 +1628,13 @@ const LotteryDetail: React.FC = () => {
             lotteryId={lottery.id}
             lotteryName={lottery.name}
             onClose={() => setShowDelegatesModal(false)}
+          />
+        )}
+        {showTreasurerModal && (
+          <TreasurerModal
+            lotteryId={lottery.id}
+            lotteryName={lottery.name}
+            onClose={() => setShowTreasurerModal(false)}
           />
         )}
 

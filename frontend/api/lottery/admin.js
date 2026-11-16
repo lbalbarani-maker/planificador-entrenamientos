@@ -656,6 +656,31 @@ async function handleAction(client, admin, body) {
     return data;
   }
 
+  if (action === 'treasurer-access') {
+    const { data, error } = await client.rpc('admin_get_lottery_treasurer_access', {
+      p_lottery_id: body.lotteryId,
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  if (action === 'set-treasurer-pin') {
+    const { data, error } = await client.rpc('admin_set_lottery_treasurer_pin', {
+      p_lottery_id: body.lotteryId,
+      p_pin: String(body.pin ?? ''),
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  if (action === 'clear-treasurer-pin') {
+    const { data, error } = await client.rpc('admin_clear_lottery_treasurer_pin', {
+      p_lottery_id: body.lotteryId,
+    });
+    if (error) throw error;
+    return data;
+  }
+
   if (action === 'register-collection') {
     const usesSplit =
       body.lotteryReceived != null || body.clubReceived != null;

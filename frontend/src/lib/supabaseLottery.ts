@@ -9,6 +9,8 @@ import {
   SaleResult,
   SellerPageData,
   Sponsor,
+  TreasurerPageData,
+  TreasurerReceiveResult,
 } from '../types/lottery';
 
 function rpcError(error: { message?: string } | null): never {
@@ -66,6 +68,33 @@ export const lotteryApi = {
     });
     if (error) rpcError(error);
     return data as DelegateCollectionResult;
+  },
+
+  async getTreasurerPage(token: string, pin: string): Promise<TreasurerPageData | null> {
+    const { data, error } = await supabase.rpc('get_lottery_treasurer', {
+      p_token: token,
+      p_pin: pin,
+    });
+    if (error) rpcError(error);
+    return (data as TreasurerPageData | null) ?? null;
+  },
+
+  async receiveTreasurerFromDelegate(
+    token: string,
+    pin: string,
+    teamId: string | null,
+    playerIds: string[] | null,
+    notes: string,
+  ): Promise<TreasurerReceiveResult> {
+    const { data, error } = await supabase.rpc('receive_lottery_treasurer_from_delegate', {
+      p_token: token,
+      p_pin: pin,
+      p_team_id: teamId,
+      p_player_ids: playerIds && playerIds.length > 0 ? playerIds : null,
+      p_notes: notes || null,
+    });
+    if (error) rpcError(error);
+    return data as TreasurerReceiveResult;
   },
 
   async getReceipt(token: string): Promise<ReceiptData | null> {

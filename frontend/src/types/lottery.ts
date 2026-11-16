@@ -330,6 +330,79 @@ export interface DelegateLinksResult {
   teams: DelegateTeamLink[];
 }
 
+export interface TreasurerAccess {
+  token: string;
+  pin_set: boolean;
+}
+
+export interface TreasurerPlayer {
+  team_id?: string | null;
+  team_name: string;
+  player_id: string;
+  player_name: string;
+  tickets_assigned: number;
+  tickets_sold: number;
+  tickets_unsold: number;
+  ticket_price: number;
+  donation_per_ticket: number;
+  lottery_expected: number;
+  club_expected: number;
+  expected: number;
+  lottery_received: number;
+  club_received: number;
+  delivered: number;
+  waived_amount: number;
+  due_amount: number;
+  pending_amount: number;
+  pending_lottery: number;
+  pending_club: number;
+  tickets_collected: number;
+  tickets_pending_collect: number;
+  player_pending_amount: number;
+  delegate_pending_amount: number;
+  treasurer_received_amount: number;
+}
+
+export interface TreasurerTotals {
+  player_count: number;
+  tickets_assigned: number;
+  tickets_sold: number;
+  tickets_unsold: number;
+  tickets_collected: number;
+  tickets_pending_collect: number;
+  lottery_expected: number;
+  club_expected: number;
+  expected: number;
+  delivered: number;
+  pending_amount: number;
+  pending_lottery: number;
+  pending_club: number;
+  player_pending_amount: number;
+  delegate_pending_amount: number;
+  treasurer_received_amount: number;
+}
+
+export interface TreasurerTeam extends TreasurerTotals {
+  team_id?: string | null;
+  team_name: string;
+  players: TreasurerPlayer[];
+}
+
+export interface TreasurerPageData {
+  lottery: Lottery;
+  teams: TreasurerTeam[];
+  totals: TreasurerTotals;
+}
+
+export interface TreasurerReceiveResult {
+  ok: boolean;
+  delivery_id: string;
+  amount: number;
+  settlement_count: number;
+  player_count: number;
+  team_id: string;
+}
+
 export interface SaleResult {
   id: string;
   token: string;
