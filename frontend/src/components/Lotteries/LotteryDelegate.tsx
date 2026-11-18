@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { lotteryApi } from '../../lib/supabaseLottery';
 import { LOTTERY_PAYMENT_METHODS } from '../../lib/lotteryPaymentMethods';
@@ -17,6 +17,10 @@ function money(value: number | null | undefined): string {
 function parseAmount(value: string): number {
   const parsed = Number(value.replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function roundMoney(value: number): number {
+  return Math.round((Number(value) || 0) * 100) / 100;
 }
 
 const LotteryDelegate: React.FC = () => {
@@ -75,6 +79,12 @@ const LotteryDelegate: React.FC = () => {
     };
   }, [data]);
 
+  const getVendidoNoCobrado = (player: DelegatePlayer): number => {
+    const donationPerTicket = data?.lottery.donation_per_ticket ?? 0;
+    const donacionVendidas = player.tickets_sold * donationPerTicket;
+    return roundMoney(player.pending_lottery + Math.min(player.pending_club, donacionVendidas));
+  };
+
   const openCollection = (player: DelegatePlayer) => {
     setCollectionPlayer(player);
     setLotteryAmount('');
@@ -84,6 +94,36 @@ const LotteryDelegate: React.FC = () => {
     setPaymentMethod(LOTTERY_PAYMENT_METHODS[0]);
     setNotes('');
   };
+
+  useEffect(() => {
+    if (!data) return;
+    if (soldCountInput === '' || collectedAmountInput === '') {
+      setClubAmount('');
+      setLotteryAmount('');
+      return;
+    }
+    const cantidad = Number(soldCountInput);
+    const importe = parseAmount(collectedAmountInput);
+    if (!Number.isInteger(cantidad) || cantidad <= 0 || !Number.isFinite(importe) || importe < 0) {
+      setClubAmount('');
+      setLotteryAmount('');
+      return;
+    }
+    const ticketPrice = data.lottery.ticket_price;
+    const donationPerTicket = data.lottery.donation_per_ticket;
+    const lotteryPerTicket = ticketPrice - donationPerTicket;
+    const esperado = cantidad * ticketPrice;
+    if (Math.abs(importe - esperado) <= 0.005) {
+      setClubAmount(roundMoney(cantidad * donationPerTicket).toFixed(2));
+      setLotteryAmount(roundMoney(cantidad * lotteryPerTicket).toFixed(2));
+    } else if (importe < esperado - 0.005) {
+      setClubAmount('');
+      setLotteryAmount('');
+    } else {
+      setClubAmount(roundMoney(importe).toFixed(2));
+      setLotteryAmount('0.00');
+    }
+  }, [soldCountInput, collectedAmountInput, data?.lottery.ticket_price, data?.lottery.donation_per_ticket, data]);
 
   const collectionLottery = parseAmount(lotteryAmount);
   const collectionClub = parseAmount(clubAmount);
@@ -212,45 +252,51 @@ const LotteryDelegate: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-2">
-            {data.players.map((player) => (
-              <div key={player.player_id} className="bg-white rounded-xl p-3 shadow-lg">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-800">{player.player_name}</p>
-                    <p className="text-xs text-gray-500">
-                      {player.tickets_sold} vendidas · {player.tickets_unsold} pendientes
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Cobrado {money(player.delivered)}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p
-                      className={`font-bold ${player.tickets_sold > 0 && player.pending_amount > 0.005 ? 'text-orange-600' : 'text-emerald-600'}`}
-                    >
-                      {money(player.tickets_sold === 0 ? 0 : player.pending_amount)}
-                    </p>
-                    <div className="mt-1 flex flex-col gap-1">
-                      <button
-                        type="button"
-                        onClick={() => openCollection(player)}
-                        disabled={player.pending_amount <= 0.005}
-                        className="rounded-lg bg-sanse-blue px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
+            {data.players.map((player) => {
+              const vendidoNoCobrado = getVendidoNoCobrado(player);
+              return (
+                <div key={player.player_id} className="bg-white rounded-xl p-3 shadow-lg">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-800">{player.player_name}</p>
+                      <p className="text-xs text-gray-500">
+                        {player.tickets_sold} vendidas · {player.tickets_unsold} pendientes
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Cobrado {money(player.delivered)}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Vendido no cobrado {money(vendidoNoCobrado)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p
+                        className={`font-bold ${vendidoNoCobrado > 0.005 ? 'text-orange-600' : 'text-emerald-600'}`}
                       >
-                        Cobrar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSharePlayer(player)}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                      >
-                        Compartir enlace
-                      </button>
+                        {money(vendidoNoCobrado)}
+                      </p>
+                      <div className="mt-1 flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openCollection(player)}
+                          disabled={player.pending_amount <= 0.005}
+                          className="rounded-lg bg-sanse-blue px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
+                        >
+                          Cobrar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSharePlayer(player)}
+                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                          Compartir enlace
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -269,8 +315,10 @@ const LotteryDelegate: React.FC = () => {
                 <div className="text-[10px] text-gray-500">Cobrado</div>
               </div>
               <div className="rounded-lg bg-gray-50 p-2">
-                <div className="font-bold text-orange-700">{money(collectionPlayer.pending_amount)}</div>
-                <div className="text-[10px] text-gray-500">Pendiente</div>
+                <div className="font-bold text-orange-700">
+                  {money(getVendidoNoCobrado(collectionPlayer))}
+                </div>
+                <div className="text-[10px] text-gray-500">Vendido no cobrado</div>
               </div>
             </div>
 
