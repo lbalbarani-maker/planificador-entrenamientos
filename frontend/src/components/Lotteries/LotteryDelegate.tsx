@@ -123,6 +123,33 @@ const LotteryDelegate: React.FC = () => {
     setClubAmount(pendingSplit.club.toFixed(2));
   };
 
+  const handleSharePlayer = async (player: DelegatePlayer) => {
+    if (!data) return;
+    const url = `${window.location.origin}/j/${player.share_token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // ignore
+    }
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: data.lottery.name,
+          text: `Venta de papeletas - ${player.player_name} · ${data.lottery.name}`,
+          url,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return;
+      }
+    }
+    await dialog.alert({
+      title: 'Enlace copiado',
+      message: url,
+      variant: 'success',
+    });
+  };
+
   const handleCollection = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!token || !collectionPlayer || invalidAmount) return;
@@ -237,14 +264,23 @@ const LotteryDelegate: React.FC = () => {
                         ? money(player.pending_amount)
                         : 'Cobrado'}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => openCollection(player)}
-                      disabled={player.pending_amount <= 0.005}
-                      className="mt-1 rounded-lg bg-sanse-blue px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
-                    >
-                      Cobrar
-                    </button>
+                    <div className="mt-1 flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openCollection(player)}
+                        disabled={player.pending_amount <= 0.005}
+                        className="rounded-lg bg-sanse-blue px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
+                      >
+                        Cobrar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSharePlayer(player)}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Compartir enlace
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

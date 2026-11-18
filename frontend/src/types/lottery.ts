@@ -289,6 +289,7 @@ export interface DelegatePlayer {
   pending_amount: number;
   pending_lottery: number;
   pending_club: number;
+  share_token: string;
 }
 
 export interface DelegatePageData {
