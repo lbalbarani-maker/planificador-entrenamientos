@@ -23,6 +23,14 @@ function roundMoney(value: number): number {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
+function playersLabel(gender: string | null | undefined): string {
+  const g = (gender || '').toLowerCase();
+  if (g === 'fem' || g === 'femenino' || g === 'female') return 'Jugadoras';
+  if (g === 'masc' || g === 'masculino' || g === 'male') return 'Jugadores';
+  if (g === 'mixto' || g === 'mixed') return 'Jugadores/as';
+  return 'Jugadores/as';
+}
+
 const LotteryDelegate: React.FC = () => {
   const { token } = useParams<{ token: string }>();
   const dialog = useAppDialog();
@@ -215,6 +223,8 @@ const LotteryDelegate: React.FC = () => {
     );
   }
 
+  const participantLabel = playersLabel(data.delegate.team_gender);
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-sanse-blue to-blue-700 p-3 pb-10 sm:p-4">
       <div className="max-w-md mx-auto min-w-0">
@@ -232,7 +242,7 @@ const LotteryDelegate: React.FC = () => {
           <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
             <div>
               <div className="text-xl font-bold text-sanse-blue">{data.players.length}</div>
-              <div className="text-[10px] text-gray-500">Jugadoras</div>
+              <div className="text-[10px] text-gray-500">{participantLabel}</div>
             </div>
             <div>
               <div className="text-xl font-bold text-purple-600">{totals.soldCount}</div>
@@ -251,7 +261,7 @@ const LotteryDelegate: React.FC = () => {
 
         {data.players.length === 0 ? (
           <div className="bg-white rounded-2xl p-5 text-center text-sm text-gray-500 shadow-lg">
-            No hay jugadoras participantes en este equipo.
+            No hay {participantLabel.toLowerCase()} participantes en este equipo.
           </div>
         ) : (
           <div className="space-y-2">

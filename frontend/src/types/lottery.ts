@@ -297,6 +297,7 @@ export interface DelegatePageData {
   delegate: {
     team_id: string;
     team_name: string;
+    team_gender?: string | null;
     token: string;
   };
   players: DelegatePlayer[];
