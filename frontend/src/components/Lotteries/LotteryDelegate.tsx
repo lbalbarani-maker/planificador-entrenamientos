@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { lotteryApi } from '../../lib/supabaseLottery';
 import { LOTTERY_PAYMENT_METHODS } from '../../lib/lotteryPaymentMethods';
@@ -82,7 +82,8 @@ const LotteryDelegate: React.FC = () => {
   const getVendidoNoCobrado = (player: DelegatePlayer): number => {
     const donationPerTicket = data?.lottery.donation_per_ticket ?? 0;
     const donacionVendidas = player.tickets_sold * donationPerTicket;
-    return roundMoney(player.pending_lottery + Math.min(player.pending_club, donacionVendidas));
+    const clubPendienteVendido = Math.max(donacionVendidas - player.club_received, 0);
+    return roundMoney(player.pending_lottery + clubPendienteVendido);
   };
 
   const openCollection = (player: DelegatePlayer) => {
