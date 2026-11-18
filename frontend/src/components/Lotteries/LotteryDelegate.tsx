@@ -121,8 +121,10 @@ const LotteryDelegate: React.FC = () => {
       setClubAmount('');
       setLotteryAmount('');
     } else {
-      setClubAmount(roundMoney(importe).toFixed(2));
-      setLotteryAmount('0.00');
+      const loteria = roundMoney(cantidad * lotteryPerTicket);
+      const club = roundMoney(importe - loteria);
+      setClubAmount(club.toFixed(2));
+      setLotteryAmount(loteria.toFixed(2));
     }
   }, [soldCountInput, collectedAmountInput, data?.lottery.ticket_price, data?.lottery.donation_per_ticket, data]);
 
@@ -355,7 +357,7 @@ const LotteryDelegate: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Club</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Donativo Club</label>
                   <input
                     type="number"
                     step="0.01"
