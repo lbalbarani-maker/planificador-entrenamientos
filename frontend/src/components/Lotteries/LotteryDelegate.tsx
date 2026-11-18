@@ -68,9 +68,9 @@ const LotteryDelegate: React.FC = () => {
   const totals = useMemo(() => {
     const players = data?.players ?? [];
     return {
-      expected: players.reduce((total, player) => total + player.expected, 0),
+      soldCount: players.reduce((total, player) => total + player.tickets_sold, 0),
+      unsoldCount: players.reduce((total, player) => total + player.tickets_unsold, 0),
       delivered: players.reduce((total, player) => total + player.delivered, 0),
-      pending: players.reduce((total, player) => total + player.pending_amount, 0),
     };
   }, [data]);
 
@@ -224,16 +224,16 @@ const LotteryDelegate: React.FC = () => {
               <div className="text-[10px] text-gray-500">Jugadoras</div>
             </div>
             <div>
-              <div className="text-xl font-bold text-purple-600">{money(totals.expected)}</div>
-              <div className="text-[10px] text-gray-500">Esperado</div>
+              <div className="text-xl font-bold text-purple-600">{totals.soldCount}</div>
+              <div className="text-[10px] text-gray-500">Nros Vendidos</div>
             </div>
             <div>
               <div className="text-xl font-bold text-emerald-600">{money(totals.delivered)}</div>
               <div className="text-[10px] text-gray-500">Cobrado</div>
             </div>
             <div>
-              <div className="text-xl font-bold text-orange-600">{money(totals.pending)}</div>
-              <div className="text-[10px] text-gray-500">Pendiente</div>
+              <div className="text-xl font-bold text-orange-600">{totals.unsoldCount}</div>
+              <div className="text-[10px] text-gray-500">Nros Pendientes</div>
             </div>
           </div>
         </div>
@@ -253,16 +253,14 @@ const LotteryDelegate: React.FC = () => {
                       {player.tickets_sold} vendidas · {player.tickets_unsold} pendientes
                     </p>
                     <p className="text-xs text-gray-500">
-                      Esperado {money(player.expected)} · Cobrado {money(player.delivered)}
+                      Cobrado {money(player.delivered)}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
                     <p
-                      className={`font-bold ${player.pending_amount > 0.005 ? 'text-orange-600' : 'text-emerald-600'}`}
+                      className={`font-bold ${player.tickets_sold > 0 && player.pending_amount > 0.005 ? 'text-orange-600' : 'text-emerald-600'}`}
                     >
-                      {player.pending_amount > 0.005
-                        ? money(player.pending_amount)
-                        : 'Cobrado'}
+                      {money(player.tickets_sold === 0 ? 0 : player.pending_amount)}
                     </p>
                     <div className="mt-1 flex flex-col gap-1">
                       <button
