@@ -185,10 +185,10 @@ const LotteryTreasurer: React.FC = () => {
         </button>
       </div>
       <div className="grid grid-cols-2 gap-1 text-xs text-gray-700 mb-2">
-        <div>Vendidas: <strong>{team.tickets_sold}</strong> ({money(team.tickets_sold * data.lottery.ticket_price)})</div>
+        <div>Vendidas: <strong>{team.tickets_sold}</strong></div>
         <div>No vendidas: <strong>{team.tickets_unsold}</strong></div>
-        <div>Cobradas: <strong>{team.tickets_collected}</strong> ({money(team.delivered)})</div>
-        <div>Por cobrar: <strong>{team.tickets_pending_collect}</strong> ({money(team.pending_amount)})</div>
+        <div>Cobradas: <strong>{team.tickets_collected}</strong></div>
+        <div>Por cobrar: <strong>{team.tickets_pending_collect}</strong></div>
         <div>A lotería: <strong>{money(team.lottery_expected)}</strong></div>
         <div>Club: <strong>{money(team.club_expected)}</strong></div>
       </div>
@@ -221,10 +221,10 @@ const LotteryTreasurer: React.FC = () => {
 
         <div className="bg-white rounded-2xl p-4 shadow-lg mb-4">
           <div className="grid grid-cols-2 gap-2 text-center mb-2">
-            <div><div className="text-lg font-bold text-sanse-blue">{totals.tickets_sold}</div><div className="text-[10px] text-gray-500">Vendidas ({money(totals.tickets_sold * data.lottery.ticket_price)})</div></div>
+            <div><div className="text-lg font-bold text-sanse-blue">{totals.tickets_sold}</div><div className="text-[10px] text-gray-500">Vendidas</div></div>
             <div><div className="text-lg font-bold text-gray-600">{totals.tickets_unsold}</div><div className="text-[10px] text-gray-500">No vendidas</div></div>
-            <div><div className="text-lg font-bold text-emerald-600">{totals.tickets_collected}</div><div className="text-[10px] text-gray-500">Cobradas ({money(totals.delivered)})</div></div>
-            <div><div className="text-lg font-bold text-orange-600">{totals.tickets_pending_collect}</div><div className="text-[10px] text-gray-500">Por cobrar ({money(totals.pending_amount)})</div></div>
+            <div><div className="text-lg font-bold text-emerald-600">{totals.tickets_collected}</div><div className="text-[10px] text-gray-500">Cobradas</div></div>
+            <div><div className="text-lg font-bold text-orange-600">{totals.tickets_pending_collect}</div><div className="text-[10px] text-gray-500">Por cobrar</div></div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-center mb-2 text-sm">
             <div className="rounded bg-purple-50 p-2"><div className="font-bold text-purple-700">{money(totals.lottery_expected)}</div><div className="text-[10px] text-gray-500">A lotería</div></div>
@@ -266,10 +266,7 @@ const LotteryTreasurer: React.FC = () => {
                       Vendidas {player.tickets_sold} · No vend. {player.tickets_unsold} · Cobradas {player.tickets_collected} · Por cobrar {player.tickets_pending_collect}
                     </p>
                     <p className="text-xs text-gray-600">
-                      Cobrado {money(player.delivered)}
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      A lotería {money(player.lottery_expected)} (pend. {money(player.pending_lottery)}) · Club {money(player.club_expected)} (pend. {money(player.pending_club)})
+                      A lotería {money(player.lottery_expected)} · Club {money(player.club_expected)}
                     </p>
                     <div className="mt-1 grid grid-cols-3 gap-1 text-center text-[10px]">
                       <div className="rounded bg-amber-50 p-1"><div className="font-semibold text-amber-700">{money(player.player_pending_amount)}</div><div className="text-gray-500">Jugador</div></div>
