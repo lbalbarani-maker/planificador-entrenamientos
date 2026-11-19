@@ -270,12 +270,16 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
               <div className="text-[10px] text-gray-500">Donativo</div>
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t flex items-center justify-between gap-2">
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <div className="mt-3 pt-3 border-t">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-lg font-bold text-sanse-blue">{money(lottery.ticket_price)} / papeleta</span>
-              <span className="text-lg font-bold text-sanse-blue">Fecha cierre: 13 Dic</span>
+              <span className="border-l border-gray-200 pl-3 text-right text-lg font-bold text-sanse-blue">Fecha cierre: 13/12/26</span>
             </div>
-            {!isOpen && <span className="shrink-0 text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Venta cerrada</span>}
+            {!isOpen && (
+              <div className="mt-2 flex justify-end">
+                <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">Venta cerrada</span>
+              </div>
+            )}
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
             Incluye {money(lottery.donation_per_ticket)} de donativo. Las papeletas no vendidas también generan ese donativo.
