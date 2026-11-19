@@ -45,6 +45,7 @@ const LotteryDelegate: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<string>(LOTTERY_PAYMENT_METHODS[0]);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [updatingTacoPlayerId, setUpdatingTacoPlayerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -169,6 +170,41 @@ const LotteryDelegate: React.FC = () => {
     });
   };
 
+  const handleTacoDeliveryChange = async (
+    player: DelegatePlayer,
+    field: 'taco_fisico_entregado' | 'taco_virtual_entregado',
+    checked: boolean,
+  ) => {
+    if (!token || !data) return;
+    const previous = data.players;
+    const nextFisico = field === 'taco_fisico_entregado' ? checked : player.taco_fisico_entregado;
+    const nextVirtual = field === 'taco_virtual_entregado' ? checked : player.taco_virtual_entregado;
+    setUpdatingTacoPlayerId(player.player_id);
+    setData({
+      ...data,
+      players: data.players.map((p) =>
+        p.player_id === player.player_id
+          ? { ...p, taco_fisico_entregado: nextFisico, taco_virtual_entregado: nextVirtual }
+          : p,
+      ),
+    });
+    try {
+      await lotteryApi.setDelegateTacoDelivery(token, player.player_id, nextFisico, nextVirtual);
+    } catch (updateError) {
+      setData((current) => (current ? { ...current, players: previous } : current));
+      await dialog.alert({
+        title: 'No se pudo actualizar',
+        message:
+          updateError instanceof Error
+            ? updateError.message
+            : 'No se pudo actualizar la entrega del taco',
+        variant: 'danger',
+      });
+    } finally {
+      setUpdatingTacoPlayerId(null);
+    }
+  };
+
   const handleCollection = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!token || !collectionPlayer || invalidAmount) return;
@@ -282,30 +318,64 @@ const LotteryDelegate: React.FC = () => {
                         Vendido no cobrado {money(vendidoNoCobrado)}
                       </p>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p
-                        className={`font-bold ${vendidoNoCobrado > 0.005 ? 'text-orange-600' : 'text-emerald-600'}`}
+                  <div className="text-right shrink-0">
+                    <p
+                      className={`font-bold ${vendidoNoCobrado > 0.005 ? 'text-orange-600' : 'text-emerald-600'}`}
+                    >
+                      {money(vendidoNoCobrado)}
+                    </p>
+                    <div className="mt-1 flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openCollection(player)}
+                        disabled={player.pending_amount <= 0.005}
+                        className="rounded-lg bg-sanse-blue px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
                       >
-                        {money(vendidoNoCobrado)}
-                      </p>
-                      <div className="mt-1 flex flex-col gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openCollection(player)}
-                          disabled={player.pending_amount <= 0.005}
-                          className="rounded-lg bg-sanse-blue px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-gray-300"
-                        >
-                          Cobrar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSharePlayer(player)}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                        >
-                          Compartir enlace
-                        </button>
-                      </div>
+                        Cobrar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSharePlayer(player)}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Compartir enlace
+                      </button>
                     </div>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-gray-100 pt-2 text-xs text-gray-700">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={!!player.taco_fisico_entregado}
+                      disabled={updatingTacoPlayerId === player.player_id}
+                      onChange={(event) =>
+                        handleTacoDeliveryChange(
+                          player,
+                          'taco_fisico_entregado',
+                          event.target.checked,
+                        )
+                      }
+                      className="h-4 w-4 rounded border-gray-300 text-sanse-blue focus:ring-sanse-blue disabled:opacity-50"
+                    />
+                    <span>Taco Físico</span>
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={!!player.taco_virtual_entregado}
+                      disabled={updatingTacoPlayerId === player.player_id}
+                      onChange={(event) =>
+                        handleTacoDeliveryChange(
+                          player,
+                          'taco_virtual_entregado',
+                          event.target.checked,
+                        )
+                      }
+                      className="h-4 w-4 rounded border-gray-300 text-sanse-blue focus:ring-sanse-blue disabled:opacity-50"
+                    />
+                    <span>Taco Virtual</span>
+                  </label>
                   </div>
                 </div>
               );

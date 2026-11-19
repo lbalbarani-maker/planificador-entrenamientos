@@ -290,6 +290,8 @@ export interface DelegatePlayer {
   pending_lottery: number;
   pending_club: number;
   share_token: string;
+  taco_fisico_entregado: boolean;
+  taco_virtual_entregado: boolean;
 }
 
 export interface DelegatePageData {

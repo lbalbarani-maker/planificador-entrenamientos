@@ -70,6 +70,22 @@ export const lotteryApi = {
     return data as DelegateCollectionResult;
   },
 
+  async setDelegateTacoDelivery(
+    token: string,
+    playerId: string,
+    tacoFisico: boolean,
+    tacoVirtual: boolean,
+  ): Promise<{ ok: boolean; taco_fisico_entregado: boolean; taco_virtual_entregado: boolean }> {
+    const { data, error } = await supabase.rpc('set_lottery_delegate_taco_delivery', {
+      p_token: token,
+      p_player_id: playerId,
+      p_taco_fisico: tacoFisico,
+      p_taco_virtual: tacoVirtual,
+    });
+    if (error) rpcError(error);
+    return data as { ok: boolean; taco_fisico_entregado: boolean; taco_virtual_entregado: boolean };
+  },
+
   async getTreasurerPage(token: string, pin: string): Promise<TreasurerPageData | null> {
     const { data, error } = await supabase.rpc('get_lottery_treasurer', {
       p_token: token,
