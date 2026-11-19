@@ -247,13 +247,7 @@ const LotteryTreasurer: React.FC = () => {
               ← Volver a equipos
             </button>
             <div className="bg-white rounded-xl p-3 shadow-lg">
-              <h2 className="font-bold text-gray-800 mb-1">{selectedTeam.team_name}</h2>
-              <p className="text-xs text-gray-500 mb-2">
-                Vendidas {selectedTeam.tickets_sold} · No vendidas {selectedTeam.tickets_unsold} · Cobradas {selectedTeam.tickets_collected} · Por cobrar {selectedTeam.tickets_pending_collect}
-              </p>
-              <p className="text-xs text-gray-600 mb-2">
-                A lotería {money(selectedTeam.lottery_expected)} · Club {money(selectedTeam.club_expected)}
-              </p>
+              <h2 className="font-bold text-gray-800 mb-2">{selectedTeam.team_name}</h2>
               {selectedTeam.team_id && selectedTeam.delegate_pending_amount > 0.005 && (
                 <button
                   type="button"
@@ -272,7 +266,7 @@ const LotteryTreasurer: React.FC = () => {
                       Vendidas {player.tickets_sold} · No vend. {player.tickets_unsold} · Cobradas {player.tickets_collected} · Por cobrar {player.tickets_pending_collect}
                     </p>
                     <p className="text-xs text-gray-600">
-                      Cobrado {money(player.delivered)} · Pendiente {money(player.pending_amount)}
+                      Cobrado {money(player.delivered)}
                     </p>
                     <p className="text-xs text-gray-600">
                       A lotería {money(player.lottery_expected)} (pend. {money(player.pending_lottery)}) · Club {money(player.club_expected)} (pend. {money(player.pending_club)})
