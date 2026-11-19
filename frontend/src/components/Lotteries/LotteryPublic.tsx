@@ -93,7 +93,6 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
   const [selling, setSelling] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [saleResult, setSaleResult] = useState<SaleResult | null>(null);
-  const [showQr, setShowQr] = useState(false);
   const [bottomOffset, setBottomOffset] = useState(0);
 
   useEffect(() => {
@@ -155,7 +154,6 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
   const collected = sold * Number(data?.lottery.ticket_price ?? 0);
   const donation = sold * Number(data?.lottery.donation_per_ticket ?? 0);
   const selectedTotal = selected.length * Number(data?.lottery.ticket_price ?? 0);
-  const shareLink = `${window.location.origin}/j/${token}`;
   const isOpen = data?.lottery.sales_status === 'open';
 
   const toggleTicket = (ticketId: string) => {
@@ -212,28 +210,6 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
     } finally {
       setSelling(false);
     }
-  };
-
-  const handleCopyLink = async () => {
-    if (await copyText(shareLink)) {
-      await dialog.alert({
-        title: 'Enlace copiado',
-        message: shareLink,
-        variant: 'success',
-      });
-      return;
-    }
-    await dialog.alert({
-      title: 'Copia este enlace',
-      message: (
-        <input
-          readOnly
-          value={shareLink}
-          onFocus={(event) => event.currentTarget.select()}
-          className="w-full rounded-lg border border-gray-300 p-2 text-sm text-gray-700"
-        />
-      ),
-    });
   };
 
   if (loading) {
@@ -294,9 +270,12 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
               <div className="text-[10px] text-gray-500">Donativo</div>
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t flex items-center justify-between">
-            <span className="text-lg font-bold text-sanse-blue">{money(lottery.ticket_price)} / papeleta</span>
-            {!isOpen && <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Venta cerrada</span>}
+          <div className="mt-3 pt-3 border-t flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="text-lg font-bold text-sanse-blue">{money(lottery.ticket_price)} / papeleta</span>
+              <span className="text-lg font-bold text-sanse-blue">Fecha cierre: 13 Dic</span>
+            </div>
+            {!isOpen && <span className="shrink-0 text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Venta cerrada</span>}
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
             Incluye {money(lottery.donation_per_ticket)} de donativo. Las papeletas no vendidas también generan ese donativo.
@@ -312,25 +291,19 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
           )}
         </div>
 
-        <div className="bg-white/10 rounded-2xl p-3 mb-4 flex gap-2">
-          <button
-            onClick={handleCopyLink}
-            className="flex-1 bg-white/90 text-sanse-blue font-bold py-2 rounded-lg text-sm"
+        <div className="bg-white/10 rounded-2xl p-3 mb-4 flex items-center justify-center">
+          <style>{`
+            @keyframes lottery-draw-beat {
+              0%, 100% { transform: scale(1); }
+              50% { transform: scale(1.04); }
+            }
+          `}</style>
+          <span
+            className="text-white font-bold"
+            style={{ display: 'inline-block', animation: 'lottery-draw-beat 1.8s ease-in-out infinite' }}
           >
-            📋 Copiar
-          </button>
-          <button
-            onClick={() => shareUrl(shareLink, `Compra papeletas de ${lottery.name}:`)}
-            className="flex-1 bg-green-500 text-white font-bold py-2 rounded-lg text-sm"
-          >
-            WhatsApp
-          </button>
-          <button
-            onClick={() => setShowQr(true)}
-            className="flex-1 bg-white/90 text-sanse-blue font-bold py-2 rounded-lg text-sm"
-          >
-            🔳 QR
-          </button>
+            Sorteo: {lottery.draw_date ? new Date(lottery.draw_date).toLocaleDateString('es-ES') : '—'}
+          </span>
         </div>
 
         {sponsors.length > 0 && (
@@ -654,33 +627,11 @@ const SellerPage: React.FC<{ token: string }> = ({ token }) => {
         </div>
       )}
 
-      {showQr && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center">
-            <h3 className="text-xl font-bold mb-3">Comparte tu enlace</h3>
-            <QrCode value={shareLink} size={240} className="mx-auto rounded-lg" />
-            <p className="text-xs text-gray-500 break-all mt-3">{shareLink}</p>
-            <button
-              onClick={() => setShowQr(false)}
-              className="mt-4 w-full bg-sanse-blue text-white py-2 rounded-lg font-bold"
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
-      )}
+      {/* share/QR block replaced by draw date notice */}
     </div>
   );
 };
 
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 const ReceiptPage: React.FC<{ token: string }> = ({ token }) => {
   const [data, setData] = useState<ReceiptData | null>(null);
